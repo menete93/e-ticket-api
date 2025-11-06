@@ -7,7 +7,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import mz.co.mozbuy.common.audit.DomainEntity;
 
+import java.rmi.server.UID;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -15,7 +17,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Entity
 @Table(name = "user_sessions")
-public class UserSession extends DomainEntity {
+public class UserSession extends DomainEntity<Long> {
 
 
     @ManyToOne(fetch = FetchType.LAZY)

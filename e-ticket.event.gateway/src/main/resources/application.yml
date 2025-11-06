@@ -1,117 +1,73 @@
+server:
+  port: 8085
 
+spring:
+  application:
+    name: api-gateway
 
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+          lower-case-service-id: true
+      httpclient:
+        connect-timeout: 1000
+        response-timeout: 10s
 
-    server:
-      port: 8085
+      routes:
+        # ✅ Rota para Auth Service
+        - id: auth-service
+          uri: lb://e-ticket.event.auth
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=1
 
-    spring:
-      application:
-        name: api-gateway
-    eureka:
-      client:
-        register-with-eureka: true
-        fetch-registry: true
-        service-url:
-          defaultZone: http://localhost:8070/eureka/
-      cloud:
-        gateway:
-          discovery:
-            locator:
-              enabled: false
-              lowerCaseServiceId: true
-          httpclient:
-            connect-timeout: 1000
-            response-timeout: 10s
+        # ✅ Rota para Event Categories
+        - id: event-categories
+          uri: lb://e-ticket.event.core
+          predicates:
+            - Path=/event-categories/**
+          filters:
+            - StripPrefix=1
 
-          routes:
-            # Auth Service Route
-            - id: auth-service
-              uri: lb://auth-service
-              predicates:
-                - Path=/api/auth/**
-              filters:
-                - name: RequestRateLimiter
-                  args:
-                    redis-rate-limiter.replenishRate: 10
-                    redis-rate-limiter.burstCapacity: 20
-                - StripPrefix=0
+      # ✅ CORREÇÃO: Configuração correta do DedupeResponseHeader
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin
+        - DedupeResponseHeader=Access-Control-Allow-Credentials
 
-            # Public API Route
-            - id: public-api
-              uri: lb://auth-service
-              predicates:
-                - Path=/api/public/**
-              filters:
-                - StripPrefix=0
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://localhost:8070/eureka/
 
-            # Admin API Route (Protected)
-            - id: admin-api
-              uri: lb://auth-service
-              predicates:
-                - Path=/api/admin/**
-              filters:
-                - StripPrefix=0
+# JWT Configuration
+app:
+  jwt:
+    secret: "mySuperSecretKeyThatIsVeryLongAndSecureForJWTTokenGeneration123456"
 
-            # User API Route (Protected)
-            - id: user-api
-              uri: lb://auth-service
-              predicates:
-                - Path=/api/user/**
-              filters:
-                - StripPrefix=0
+# Logging Configuration
+logging:
+  level:
+    org:
+      springframework:
+        cloud:
+          gateway: DEBUG
+        security: DEBUG
+  pattern:
+    console: "%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n"
 
-            # Event Service (Futuro)
-            - id: event-service
-              uri: lb://event-service
-              predicates:
-                - Path=/api/events/**
-              filters:
-                - StripPrefix=0
-
-            # Ticket Service (Futuro)
-            - id: ticket-service
-              uri: lb://ticket-service
-              predicates:
-                - Path=/api/tickets/**
-              filters:
-                - StripPrefix=0
-
-          default-filters:
-            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
-
-        # Consul Configuration (Opcional)
-        consul:
-          host: localhost
-          port: 8500
-          discovery:
-            prefer-ip-address: true
-            health-check-path: /actuator/health
-            health-check-interval: 15s
-
-    # JWT Configuration (DEVE ser igual ao do auth-service)
-    app:
-      jwt:
-        secret: "mySuperSecretKeyThatIsVeryLongAndSecureForJWTTokenGeneration123456"
-
-    # Logging
-    logging:
-      level:
-        org:
-          springframework:
-            security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
-      pattern:
-        console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
-
-
-
-        # Management Endpoints
-    management:
-      endpoints:
-        web:
-          exposure:
-            include: health,info,metrics,gateway
-      endpoint:
-        health:
-          show-details: always
-        gateway:
-          enabled: true
+# Management Endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      enabled: true

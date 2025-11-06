@@ -1,7 +1,5 @@
 package mz.co.mozbuy.e_ticket.event.auth.config;
 
-
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -15,46 +13,40 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfiguration {
 
-    // ✅ Construtor vazio - sem dependências que causam ciclo!
-    public SecurityConfiguration() {
-    }
-
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            JwtAuthenticationFilter jwtAuthFilter,
-            UserDetailsService userDetailsService  // ✅ Injeta UserDetailsService no método
+            UserDetailsService userDetailsService
     ) throws Exception {
-        http
+        return http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/**",
-                                "/api/public/**",
-                                "/h2-console/**",
-                                "/actuator/**"
+                                "/auth/**",           // ✅ Login público
+                                "/api/auth/**",       // ✅ Login público
+                                "/h2-console/**",     // ✅ Console H2
+                                "/actuator/**",       // ✅ Health checks
+                                "/error"              // ✅ Página de erro
                         ).permitAll()
+                        .requestMatchers("/event-categories/**").authenticated() // ✅ Protegido
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/user/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authenticationProvider(authenticationProvider(userDetailsService))  // ✅ Passa como parâmetro
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
-
-        return http.build();
+                .authenticationProvider(authenticationProvider(userDetailsService))
+                // ❌ REMOVIDO: .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .build();
     }
 
     @Bean
     public AuthenticationProvider authenticationProvider(UserDetailsService userDetailsService) {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);  // ✅ Usa o parâmetro
+        authProvider.setUserDetailsService(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }

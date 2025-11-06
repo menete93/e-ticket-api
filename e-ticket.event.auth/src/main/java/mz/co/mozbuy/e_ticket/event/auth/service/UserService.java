@@ -58,13 +58,14 @@ public class UserService implements UserDetailsService {
     public UserContext getCurrentUserContext() {
         User user = getCurrentUser();
         return UserContext.builder()
-                .id(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .role(user.getRole().getName())
                 .build();
+
+
     }
 
     @Transactional(readOnly = true)

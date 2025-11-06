@@ -24,7 +24,9 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     private final JwtTokenValidator jwtTokenValidator;
 
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
-            "/api/auth/",
+            "/api/auth/login",     // ✅ Já está correto
+            "/api/auth/register",  // ✅ Adicione
+            "/api/auth/validate",  // ✅ Adicione
             "/api/public/",
             "/actuator/",
             "/h2-console/",
@@ -34,7 +36,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     );
 
     private static final List<String> ADMIN_ENDPOINTS = List.of(
-            "/api/admin/"
+            "/api/event-categories/"   // ✅ PATH NO GATEWAY (com /api/)
     );
 
     @Override

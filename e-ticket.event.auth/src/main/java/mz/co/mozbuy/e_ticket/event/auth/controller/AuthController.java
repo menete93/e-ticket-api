@@ -35,7 +35,7 @@ public class AuthController {
         userService.updateLastLogin(authenticatedUser.getUsername());
 
         UserContext userContext = UserContext.builder()
-                .id(authenticatedUser.getId())
+//                .id(authenticatedUser.getId())
                 .username(authenticatedUser.getUsername())
                 .email(authenticatedUser.getEmail())
                 .firstName(authenticatedUser.getFirstName())
@@ -60,7 +60,7 @@ public class AuthController {
         String jwtToken = jwtService.generateToken(registeredUser);
 
         UserContext userContext = UserContext.builder()
-                .id(registeredUser.getId())
+//                .id(registeredUser.getId())
                 .username(registeredUser.getUsername())
                 .email(registeredUser.getEmail())
                 .firstName(registeredUser.getFirstName())

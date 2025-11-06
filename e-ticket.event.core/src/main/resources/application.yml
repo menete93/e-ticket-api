@@ -2,9 +2,11 @@ server:
   port: 8080
 spring:
   application:
-    name: "e-ticket.event.core"
+    name: e-ticket.event.core
+  main:
+    allow-bean-definition-overriding: true
   profiles:
-    active: "default"
+    active: default
   datasource:
     url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:e_ticket}
     username: ${DATABASE_USERNAME:postgres}

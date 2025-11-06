@@ -11,6 +11,7 @@ import mz.co.mozbuy.common.audit.DomainEntity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -18,7 +19,7 @@ import java.util.List;
 @AllArgsConstructor
 @Entity
 @Table(name = "roles")
-public class Role extends DomainEntity {
+public class Role extends DomainEntity<Long> {
 
 
     @Column(unique = true, nullable = false)

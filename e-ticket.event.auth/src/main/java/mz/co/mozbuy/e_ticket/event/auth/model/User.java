@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import mz.co.mozbuy.common.audit.AuditableEntity;
 import mz.co.mozbuy.common.audit.DomainEntity;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -21,7 +22,7 @@ import java.util.List;
 @AllArgsConstructor
 @Entity
 @Table(name = "users")
-public class User extends DomainEntity implements UserDetails {
+public class User extends AuditableEntity<Long, String> implements UserDetails {
 
 
     @Column(unique = true, nullable = false)

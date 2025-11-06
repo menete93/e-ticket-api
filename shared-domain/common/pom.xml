@@ -10,7 +10,7 @@
     <groupId>mz.co.mozbuy</groupId>
     <artifactId>common</artifactId>
     <version>${common-lib.version}</version>
-    <name>common</name>
+<!--    <name>common</name>-->
     <description>Common Project for e-ticket microservices</description>
     <url/>
     <licenses>

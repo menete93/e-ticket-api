@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @EntityListeners(AuditingEntityListener.class)
 @FilterDef(name = "softDeleteFilter", parameters = @ParamDef(name = "deletedState", type = Integer.class))
 @Filter(name = "softDeleteFilter", condition = "life_cycle_state <> :deletedState")
-public abstract class AuditableEntity<ID, U> extends DomainEntity {
+public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> {
 
     // ==================== Auditoria ====================
     @CreatedDate
