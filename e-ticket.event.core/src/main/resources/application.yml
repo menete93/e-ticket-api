@@ -1,0 +1,41 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: "e-ticket.event.core"
+  profiles:
+    active: "default"
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:e_ticket}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:0000}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    show-sql: ${JPA_SHOW_SQL:true}
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: ${HIBERNATE_FORMAT_SQL:true}
+
+  sql:
+    init:
+      mode: always
+      platform: postgres
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://localhost:8070/eureka/
+
+
+logging:
+  level:
+    org:
+      springframework:
+        security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
+  pattern:
+    console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
+

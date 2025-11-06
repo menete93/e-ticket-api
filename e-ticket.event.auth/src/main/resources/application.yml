@@ -1,0 +1,80 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: "e-ticket.event.auth"
+  profiles:
+    active: "default"
+
+  # ⬇️⬇️⬇️ SOLUÇÃO PARA DEPENDÊNCIA CIRCULAR ⬇️⬇️⬇️
+  main:
+    allow-circular-references: true
+
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:e_ticket}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:0000}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    show-sql: ${JPA_SHOW_SQL:false}
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: ${HIBERNATE_FORMAT_SQL:true}
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  sql:
+    init:
+      mode: always
+      platform: postgres
+
+# Configurações JWT
+jwt:
+  secret: "mySuperSecretKeyThatIsVeryLongAndSecureForJWTTokenGeneration123456"
+  expiration: 86400000  # 24 horas em milissegundos
+
+# Configurações CORS
+cors:
+  allowed-origins: "*"
+  allowed-methods: "GET,POST,PUT,DELETE,OPTIONS,PATCH"
+  allowed-headers: "*"
+  exposed-headers: "Authorization,Content-Type"
+  allow-credentials: true
+  max-age: 3600
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://localhost:8070/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org:
+      springframework:
+        security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
+      hibernate: DEBUG
+    mz:
+      co:
+        mozbuy: DEBUG
+  pattern:
+    console: "${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}"
