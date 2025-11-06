@@ -2,14 +2,16 @@ package mz.co.mozbuy.e_ticket.event.auth.controller;
 
 
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
+
+
 import lombok.RequiredArgsConstructor;
 import mz.co.mozbuy.e_ticket.event.auth.dto.LoginRequest;
 import mz.co.mozbuy.e_ticket.event.auth.dto.LoginResponse;
-import mz.co.mozbuy.e_ticket.event.auth.dto.RegisterRequest;
+import mz.co.mozbuy.e_ticket.event.auth.dto.UserContext;
 import mz.co.mozbuy.e_ticket.event.auth.model.User;
 import mz.co.mozbuy.e_ticket.event.auth.service.AuthService;
+import mz.co.mozbuy.e_ticket.event.auth.service.JwtService;
+import mz.co.mozbuy.e_ticket.event.auth.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,41 +21,82 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final JwtService jwtService;
+    private final UserService userService;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = getClientIpAddress(httpRequest);
-        String userAgent = httpRequest.getHeader("User-Agent");
+    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+        User authenticatedUser = authService.authenticate(request.getUsername(), request.getPassword());
 
-        LoginResponse response = authService.login(request, ipAddress, userAgent);
+        // Gera o token JWT
+        String jwtToken = jwtService.generateToken(authenticatedUser);
+
+        // Atualiza último login
+        userService.updateLastLogin(authenticatedUser.getUsername());
+
+        UserContext userContext = UserContext.builder()
+                .id(authenticatedUser.getId())
+                .username(authenticatedUser.getUsername())
+                .email(authenticatedUser.getEmail())
+                .firstName(authenticatedUser.getFirstName())
+                .lastName(authenticatedUser.getLastName())
+                .role(authenticatedUser.getRole().getName())
+                .build();
+
+        LoginResponse response = LoginResponse.builder()
+                .token(jwtToken)
+                .type("Bearer")
+                .expiresIn(jwtService.getExpirationTime())
+                .user(userContext)
+                .build();
+
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@Valid @RequestBody RegisterRequest request) {
-        User user = authService.register(request);
-        return ResponseEntity.ok(user);
+    public ResponseEntity<LoginResponse> register(@RequestBody User user) {
+        User registeredUser = userService.registerUser(user);
+
+        String jwtToken = jwtService.generateToken(registeredUser);
+
+        UserContext userContext = UserContext.builder()
+                .id(registeredUser.getId())
+                .username(registeredUser.getUsername())
+                .email(registeredUser.getEmail())
+                .firstName(registeredUser.getFirstName())
+                .lastName(registeredUser.getLastName())
+                .role(registeredUser.getRole().getName())
+                .build();
+
+        LoginResponse response = LoginResponse.builder()
+                .token(jwtToken)
+                .type("Bearer")
+                .expiresIn(jwtService.getExpirationTime())
+                .user(userContext)
+                .build();
+
+
+        return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader) {
-        String token = extractToken(authHeader);
-        authService.logout(token);
-        return ResponseEntity.ok().build();
-    }
-
-    private String getClientIpAddress(HttpServletRequest request) {
-        String xfHeader = request.getHeader("X-Forwarded-For");
-        if (xfHeader != null) {
-            return xfHeader.split(",")[0];
+    @PostMapping("/validate")
+    public ResponseEntity<Boolean> validateToken(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.ok(false);
         }
-        return request.getRemoteAddr();
+
+        String token = authHeader.substring(7);
+        boolean isValid = jwtService.isTokenValid(token);
+
+        return ResponseEntity.ok(isValid);
     }
 
-    private String extractToken(String authHeader) {
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return authHeader.substring(7);
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser() {
+        try {
+            return ResponseEntity.ok(userService.getCurrentUserContext());
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body("Not authenticated");
         }
-        return null;
     }
 }

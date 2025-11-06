@@ -1,25 +1,117 @@
-spring:
-  application:
-    name: "e-ticket.event.gateway"
-eureka:
-  client:
-    register-with-eureka: true
-    fetch-registry: true
-    service-url:
-      defaultZone: http://localhost:8070/eureka/
-  cloud:
-    gateway:
-      discovery:
-        locator:
-          enabled: false
-          lowerCaseServiceId: true
-      httpclient:
-        connect-timeout: 1000
-        response-timeout: 10s
-logging:
-  level:
-    com:
-      eazybytes:
-        gatewayserver: DEBUG
-  pattern:
-    level: "%5p [${spring.application.name},%X{trace_id},%X{span_id}]"
+
+
+
+    server:
+      port: 8085
+
+    spring:
+      application:
+        name: api-gateway
+    eureka:
+      client:
+        register-with-eureka: true
+        fetch-registry: true
+        service-url:
+          defaultZone: http://localhost:8070/eureka/
+      cloud:
+        gateway:
+          discovery:
+            locator:
+              enabled: false
+              lowerCaseServiceId: true
+          httpclient:
+            connect-timeout: 1000
+            response-timeout: 10s
+
+          routes:
+            # Auth Service Route
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                - StripPrefix=0
+
+            # Public API Route
+            - id: public-api
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/public/**
+              filters:
+                - StripPrefix=0
+
+            # Admin API Route (Protected)
+            - id: admin-api
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/admin/**
+              filters:
+                - StripPrefix=0
+
+            # User API Route (Protected)
+            - id: user-api
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/user/**
+              filters:
+                - StripPrefix=0
+
+            # Event Service (Futuro)
+            - id: event-service
+              uri: lb://event-service
+              predicates:
+                - Path=/api/events/**
+              filters:
+                - StripPrefix=0
+
+            # Ticket Service (Futuro)
+            - id: ticket-service
+              uri: lb://ticket-service
+              predicates:
+                - Path=/api/tickets/**
+              filters:
+                - StripPrefix=0
+
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
+
+        # Consul Configuration (Opcional)
+        consul:
+          host: localhost
+          port: 8500
+          discovery:
+            prefer-ip-address: true
+            health-check-path: /actuator/health
+            health-check-interval: 15s
+
+    # JWT Configuration (DEVE ser igual ao do auth-service)
+    app:
+      jwt:
+        secret: "mySuperSecretKeyThatIsVeryLongAndSecureForJWTTokenGeneration123456"
+
+    # Logging
+    logging:
+      level:
+        org:
+          springframework:
+            security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
+      pattern:
+        console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
+
+
+
+        # Management Endpoints
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: health,info,metrics,gateway
+      endpoint:
+        health:
+          show-details: always
+        gateway:
+          enabled: true
