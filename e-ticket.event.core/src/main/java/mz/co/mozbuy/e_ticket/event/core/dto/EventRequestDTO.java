@@ -1,26 +1,51 @@
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-import lombok.*;
-import java.time.LocalDateTime;
 
-@Getter
-@Setter
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class EventRequestDTO {
 
-    private Long category_id;
+    @NotBlank(message = "Event name is required")
+    @Size(min = 3, max = 200, message = "Name must be between 3 and 200 characters")
     private String name;
+
+    @NotBlank(message = "Event description is required")
+    @Size(min = 10, max = 2000, message = "Description must be between 10 and 2000 characters")
     private String description;
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime startTime;
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime endTime;
-    private Integer capacity;
-    private String seatType;
+
+    @NotNull(message = "Latitude is required")
     private Double latitude;
+
+    @NotNull(message = "Longitude is required")
     private Double longitude;
-    private String createdBy;
+
+    @NotNull(message = "Category ID is required")
+    private Long categoryId;
+
+    @NotNull(message = "Event date is required")
+    private String eventDate;
+
+    private String startTime;
+    private String endTime;
+    private String registrationDeadline;
+    private String coverImageUrl;
+    private String bannerImageUrl;
+    private Integer maxAttendees;
+    private Integer minAttendees;
+    private Boolean isPublic = true;
+    private Boolean isFeatured = false;
+    private Boolean isFree = false;
+
+    private List<EventTicketRequestDTO> tickets = new ArrayList<>();
 }

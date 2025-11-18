@@ -1,3 +1,20 @@
+CREATE EXTENSION postgis;
+
+SELECT extname, extnamespace::regnamespace
+FROM pg_extension
+WHERE extname = 'postgis';
+
+
+DROP EXTENSION postgis CASCADE;
+CREATE SCHEMA public;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO public;
+ALTER DATABASE e_ticket SET search_path = public, e_ticket;
+CREATE EXTENSION postgis SCHEMA public;
+
+
+
+
 CREATE TABLE event_categories (
 id BIGINT AUTO_INCREMENT PRIMARY KEY,
 name VARCHAR(100) NOT NULL UNIQUE,

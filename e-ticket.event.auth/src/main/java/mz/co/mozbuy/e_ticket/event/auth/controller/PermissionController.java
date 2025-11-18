@@ -45,4 +45,5 @@ public class PermissionController {
         roleService.deletePermission(id);
         return ResponseEntity.ok().build();
     }
+
 }

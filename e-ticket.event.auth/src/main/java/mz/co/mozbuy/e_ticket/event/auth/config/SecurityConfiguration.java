@@ -33,7 +33,7 @@ public class SecurityConfiguration {
                                 "/actuator/**",       // ✅ Health checks
                                 "/error"              // ✅ Página de erro
                         ).permitAll()
-                        .requestMatchers("/event-categories/**").authenticated() // ✅ Protegido
+                        .requestMatchers("/e-ticket/**").authenticated() // ✅ Protegido
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

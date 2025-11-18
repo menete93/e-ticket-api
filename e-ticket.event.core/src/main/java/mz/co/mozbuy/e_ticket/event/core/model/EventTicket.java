@@ -1,0 +1,152 @@
+package mz.co.mozbuy.e_ticket.event.core.model;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import mz.co.mozbuy.common.audit.AuditableEntity;
+import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "event_tickets")
+@Getter
+@Setter
+public class EventTicket extends AuditableEntity<Long, String> {
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 50)
+    private TicketCategory category;
+
+    @Column(name = "ticket_name", nullable = false, length = 100)
+    private String ticketName;
+
+    @Column(name = "total_quantity", nullable = false)
+    private Integer totalQuantity;
+
+    @Column(name = "available_quantity", nullable = false)
+    private Integer availableQuantity;
+
+    @Column(name = "reserved_quantity", nullable = false)
+    private Integer reservedQuantity = 0;
+
+    @Column(name = "sold_quantity", nullable = false)
+    private Integer soldQuantity = 0;
+
+    @Column(name = "current_price", precision = 15, scale = 2)
+    private BigDecimal currentPrice;
+
+    @Column(name = "original_price", precision = 15, scale = 2)
+    private BigDecimal originalPrice;
+
+    @Column(length = 1000)
+    private String description;
+
+    @Column(name = "benefits", length = 1000)
+    private String benefits;
+
+    @Column(name = "sales_start_date")
+    private LocalDateTime salesStartDate;
+
+    @Column(name = "sales_end_date")
+    private LocalDateTime salesEndDate;
+
+    @Column(name = "max_tickets_per_user")
+    private Integer maxTicketsPerUser = 10;
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    @Column(name = "has_dynamic_pricing", nullable = false)
+    private Boolean hasDynamicPricing = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pricing_strategy_id")
+    private PricingStrategy pricingStrategy;
+
+    @OneToMany(mappedBy = "eventTicket", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<ScheduledPriceChange> scheduledPriceChanges = new ArrayList<>();
+
+    @OneToMany(mappedBy = "eventTicket", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<TicketPriceHistory> priceHistory = new ArrayList<>();
+
+    public EventTicket() {}
+
+    public EventTicket(Event event, TicketCategory category, String ticketName,
+                       Integer totalQuantity, BigDecimal price, String description) {
+        this.event = event;
+        this.category = category;
+        this.ticketName = ticketName;
+        this.totalQuantity = totalQuantity;
+        this.availableQuantity = totalQuantity;
+        this.currentPrice = price;
+        this.originalPrice = price;
+        this.description = description;
+    }
+
+    public boolean isAvailable() {
+        return isActive && availableQuantity > 0 && isSalesPeriodActive();
+    }
+
+    public boolean isSalesPeriodActive() {
+        LocalDateTime now = LocalDateTime.now();
+        return (salesStartDate == null || now.isAfter(salesStartDate)) &&
+                (salesEndDate == null || now.isBefore(salesEndDate));
+    }
+
+    public void updatePrice(BigDecimal newPrice, String reason) {
+        if (this.currentPrice != null && !this.currentPrice.equals(newPrice)) {
+            // Registrar no histórico
+            TicketPriceHistory history = new TicketPriceHistory();
+            history.setEventTicket(this);
+            history.setOldPrice(this.currentPrice);
+            history.setNewPrice(newPrice);
+            history.setChangeReason(reason);
+            history.setChangedAt(LocalDateTime.now());
+            this.priceHistory.add(history);
+        }
+        this.currentPrice = newPrice;
+    }
+
+    public void reserveTicket(Integer quantity) {
+        if (availableQuantity >= quantity) {
+            availableQuantity -= quantity;
+            reservedQuantity += quantity;
+        } else {
+            throw new IllegalStateException("Not enough tickets available for reservation");
+        }
+    }
+
+    public void confirmSale(Integer quantity) {
+        if (reservedQuantity >= quantity) {
+            reservedQuantity -= quantity;
+            soldQuantity += quantity;
+        } else {
+            throw new IllegalStateException("Not enough reserved tickets for sale confirmation");
+        }
+    }
+
+    public void releaseReservation(Integer quantity) {
+        if (reservedQuantity >= quantity) {
+            reservedQuantity -= quantity;
+            availableQuantity += quantity;
+        } else {
+            throw new IllegalStateException("Not enough reserved tickets to release");
+        }
+    }
+
+    public BigDecimal getTotalRevenue() {
+        return currentPrice != null ? currentPrice.multiply(BigDecimal.valueOf(soldQuantity)) : BigDecimal.ZERO;
+    }
+
+    public Double getSoldPercentage() {
+        return totalQuantity > 0 ? (soldQuantity.doubleValue() / totalQuantity.doubleValue()) * 100 : 0.0;
+    }
+}

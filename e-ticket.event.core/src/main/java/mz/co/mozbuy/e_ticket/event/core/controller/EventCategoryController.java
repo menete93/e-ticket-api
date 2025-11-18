@@ -1,11 +1,16 @@
 package mz.co.mozbuy.e_ticket.event.core.controller;
 
-import lombok.RequiredArgsConstructor;
-import mz.co.mozbuy.e_ticket.event.core.model.EventCategoryEntity;
-import mz.co.mozbuy.e_ticket.event.core.service.EventCategoryService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
+
+import mz.co.mozbuy.e_ticket.event.core.dto.EventCategoryDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.EventCategoryRequestDTO;
+import mz.co.mozbuy.e_ticket.event.core.service.EventCategoryService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
@@ -13,34 +18,58 @@ import java.util.List;
 @RequiredArgsConstructor
 public class EventCategoryController {
 
-    private final EventCategoryService service;
+    private final EventCategoryService eventCategoryService;
 
-    @PostMapping
-    public ResponseEntity<EventCategoryEntity> create(@RequestBody EventCategoryEntity category) {
-        return ResponseEntity.ok(service.create(category));
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<EventCategoryEntity> update(@PathVariable Long id, @RequestBody EventCategoryEntity category) {
-        category.setId(id);
-        return ResponseEntity.ok(service.update(category));
+    @GetMapping
+    public ResponseEntity<List<EventCategoryDTO>> getAllCategories() {
+        List<EventCategoryDTO> categories = eventCategoryService.findAllActive();
+        return ResponseEntity.ok(categories);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<EventCategoryEntity> findById(@PathVariable Long id) {
-        return service.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<EventCategoryDTO> getCategoryById(@PathVariable Long id) {
+        EventCategoryDTO category = eventCategoryService.findById(id);
+        return ResponseEntity.ok(category);
     }
 
-    @GetMapping
-    public ResponseEntity<List<EventCategoryEntity>> findAll() {
-        return ResponseEntity.ok(service.findAll());
+    @GetMapping("/name/{name}")
+    public ResponseEntity<EventCategoryDTO> getCategoryByName(@PathVariable String name) {
+        EventCategoryDTO category = eventCategoryService.findByName(name);
+        return ResponseEntity.ok(category);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<EventCategoryDTO>> searchCategories(@RequestParam String term) {
+        List<EventCategoryDTO> categories = eventCategoryService.search(term);
+        return ResponseEntity.ok(categories);
+    }
+
+    @GetMapping("/popular")
+    public ResponseEntity<List<EventCategoryDTO>> getPopularCategories() {
+        List<EventCategoryDTO> categories = eventCategoryService.findPopularCategories();
+        return ResponseEntity.ok(categories);
+    }
+
+    @PostMapping
+    public ResponseEntity<EventCategoryDTO> createCategory(
+            @Valid @RequestBody EventCategoryRequestDTO requestDTO,
+            @RequestHeader("X-User-Id") String username
+    ) {
+        EventCategoryDTO createdCategory = eventCategoryService.create(requestDTO, username);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdCategory);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<EventCategoryDTO> updateCategory(
+            @PathVariable Long id,
+            @Valid @RequestBody EventCategoryRequestDTO requestDTO) {
+        EventCategoryDTO updatedCategory = eventCategoryService.update(id, requestDTO);
+        return ResponseEntity.ok(updatedCategory);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        service.delete(id);
+    public ResponseEntity<Void> deactivateCategory(@PathVariable Long id) {
+        eventCategoryService.deactivate(id);
         return ResponseEntity.noContent().build();
     }
 }

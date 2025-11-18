@@ -1,7 +1,5 @@
 package mz.co.mozbuy.e_ticket.event.gateway.config;
 
-
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -24,9 +22,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     private final JwtTokenValidator jwtTokenValidator;
 
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
-            "/api/auth/login",     // ✅ Já está correto
-            "/api/auth/register",  // ✅ Adicione
-            "/api/auth/validate",  // ✅ Adicione
+            "/api/auth/login",
+            "/api/auth/validate",
             "/api/public/",
             "/actuator/",
             "/h2-console/",
@@ -36,7 +33,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     );
 
     private static final List<String> ADMIN_ENDPOINTS = List.of(
-            "/api/event-categories/"   // ✅ PATH NO GATEWAY (com /api/)
+            "/event-categories/**",
+            "/api/auth/register"
     );
 
     @Override
@@ -44,48 +42,60 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getPath().toString();
 
-        // ✅ Skip authentication for public endpoints
+        // Skip authentication for public endpoints
         if (isPublicEndpoint(path)) {
             return chain.filter(exchange);
         }
 
-        // ✅ Get Authorization header
+        // Get Authorization header
         String authHeader = getAuthHeader(request);
-
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return onError(exchange, "Missing or invalid Authorization header", HttpStatus.UNAUTHORIZED);
         }
 
         String token = authHeader.substring(7);
 
-        // ✅ Validate JWT token
-        if (!jwtTokenValidator.validateToken(token)) {
+        // Validate JWT token
+        if (!jwtTokenValidator.validateToken(token) || jwtTokenValidator.isTokenExpired(token)) {
             return onError(exchange, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
         }
 
-        // ✅ Check token expiration
-        if (jwtTokenValidator.isTokenExpired(token)) {
-            return onError(exchange, "Token expired", HttpStatus.UNAUTHORIZED);
-        }
-
-        // ✅ Extract user information from token
+        // Extract user information
         String username = jwtTokenValidator.extractUsername(token);
         if (username == null) {
             return onError(exchange, "Unable to extract user from token", HttpStatus.UNAUTHORIZED);
         }
 
-        // ✅ Check admin routes
-        if (isAdminEndpoint(path)) {
-            if (!hasAdminRole(token)) {
-                return onError(exchange, "Insufficient permissions", HttpStatus.FORBIDDEN);
-            }
+        // Extract roles
+        String rolesString = extractRoles(token);
+
+        // Check admin routes
+        if (isAdminEndpoint(path) && !rolesString.contains("ADMIN")) {
+            return onError(exchange, "Insufficient permissions", HttpStatus.FORBIDDEN);
         }
 
-        // ✅ Add user headers to the request
-        ServerHttpRequest modifiedRequest = addUserHeaders(request, username, token);
+        // Add headers
+        ServerHttpRequest modifiedRequest = addUserHeaders(request, username, token, rolesString);
 
         log.info("Authenticated request - User: {}, Path: {}", username, path);
         return chain.filter(exchange.mutate().request(modifiedRequest).build());
+    }
+
+    private String extractRoles(String token) {
+        try {
+            var claims = jwtTokenValidator.extractAllClaims(token);
+            Object roles = claims.get("roles"); // depende de como os roles estão no JWT
+            if (roles instanceof List<?>) {
+                return String.join(",", ((List<?>) roles).stream()
+                        .map(Object::toString)
+                        .toList());
+            } else if (roles != null) {
+                return roles.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract roles from token: {}", e.getMessage());
+        }
+        return "";
     }
 
     private boolean isPublicEndpoint(String path) {
@@ -101,30 +111,17 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         return (authHeaders != null && !authHeaders.isEmpty()) ? authHeaders.get(0) : null;
     }
 
-    private boolean hasAdminRole(String token) {
-        // Implement role extraction from token
-        // This depends on how you structure your JWT claims
-        try {
-            var claims = jwtTokenValidator.extractAllClaims(token);
-            String role = claims.get("role", String.class);
-            return "ADMIN".equals(role) || "ROLE_ADMIN".equals(role);
-        } catch (Exception e) {
-            log.warn("Failed to extract role from token: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    private ServerHttpRequest addUserHeaders(ServerHttpRequest request, String username, String token) {
+    private ServerHttpRequest addUserHeaders(ServerHttpRequest request, String username, String token, String rolesString) {
         return request.mutate()
                 .header("X-User-Id", username)
                 .header("X-User-Auth", "Bearer " + token)
+                .header("X-User-Roles", rolesString)
                 .header("X-Authenticated", "true")
                 .build();
     }
 
     private Mono<Void> onError(ServerWebExchange exchange, String error, HttpStatus status) {
         log.warn("Authentication failed: {} - Path: {}", error, exchange.getRequest().getPath());
-
         exchange.getResponse().setStatusCode(status);
         return exchange.getResponse().setComplete();
     }
