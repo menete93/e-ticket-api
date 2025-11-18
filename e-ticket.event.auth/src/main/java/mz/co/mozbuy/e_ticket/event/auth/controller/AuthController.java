@@ -35,7 +35,7 @@ public class AuthController {
         userService.updateLastLogin(authenticatedUser.getUsername());
 
         UserContext userContext = UserContext.builder()
-//                .id(authenticatedUser.getId())
+                .id(authenticatedUser.getId())
                 .username(authenticatedUser.getUsername())
                 .email(authenticatedUser.getEmail())
                 .firstName(authenticatedUser.getFirstName())

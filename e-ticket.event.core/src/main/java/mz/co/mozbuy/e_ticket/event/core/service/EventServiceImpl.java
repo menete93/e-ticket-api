@@ -1,7 +1,10 @@
 package mz.co.mozbuy.e_ticket.event.core.service;
 
 import lombok.RequiredArgsConstructor;
+import mz.co.mozbuy.e_ticket.event.core.dto.EventDto;
 import mz.co.mozbuy.e_ticket.event.core.dto.EventRequestDTO;
+import mz.co.mozbuy.e_ticket.event.core.enums.TicketType;
+import mz.co.mozbuy.e_ticket.event.core.mapper.EventMapper;
 import mz.co.mozbuy.e_ticket.event.core.model.EventEntity;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventCategoryRepository;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
@@ -11,6 +14,7 @@ import org.locationtech.jts.geom.Point;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,12 +30,14 @@ public class EventServiceImpl implements EventService{
     public EventEntity create(EventRequestDTO dto) {
         EventEntity event = new EventEntity();
 
+        // Buscar categoria e setar corretamente
+
         event.setName(dto.getName());
         event.setDescription(dto.getDescription());
         event.setStartTime(dto.getStartTime());
         event.setEndTime(dto.getEndTime());
         event.setCapacity(dto.getCapacity());
-        event.setSeatType(dto.getSeatType());
+        event.setSeatType(TicketType.valueOf(dto.getSeatType().toUpperCase()));
         event.setLatitude(dto.getLatitude());
         event.setLongitude(dto.getLongitude());
         event.setCreatedBy(dto.getCreatedBy());
@@ -54,7 +60,6 @@ public class EventServiceImpl implements EventService{
         return eventRepository.save(event);
 
     }
-
     @Override
     public EventEntity update(EventEntity event) {
         return null;
@@ -62,14 +67,16 @@ public class EventServiceImpl implements EventService{
 
     @Override
     public Optional<EventEntity> findById(Long id) {
-        return Optional.empty();
-    }
+        return eventRepository.findById(id); }
 
     @Override
-    public List<EventEntity> findAll() {
-        return List.of();
-    }
+    public List<EventDto> findAll() {
+        return eventRepository.findAll()
+                .stream()
+                .map(EventMapper::toDto)
+                .collect(Collectors.toList());
 
+}
     @Override
     public void delete(Long id) {
 

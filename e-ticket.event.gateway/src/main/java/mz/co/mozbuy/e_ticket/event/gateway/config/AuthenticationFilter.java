@@ -25,7 +25,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
 
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
             "/api/auth/login",     // ✅ Já está correto
-            "/api/auth/register",  // ✅ Adicione
+//            "/api/auth/register",  // ✅ Adicione
             "/api/auth/validate",  // ✅ Adicione
             "/api/public/",
             "/actuator/",
@@ -36,7 +36,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     );
 
     private static final List<String> ADMIN_ENDPOINTS = List.of(
-            "/api/event-categories/"   // ✅ PATH NO GATEWAY (com /api/)
+            "/api/event-categories/" ,
+            "/api/auth/register"
     );
 
     @Override

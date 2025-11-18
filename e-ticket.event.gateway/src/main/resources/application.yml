@@ -13,7 +13,7 @@ spring:
           lower-case-service-id: true
       httpclient:
         connect-timeout: 1000
-        response-timeout: 10s
+        response-timeout: 5m
 
       routes:
         # ✅ Rota para Auth Service
@@ -22,13 +22,13 @@ spring:
           predicates:
             - Path=/api/auth/**
           filters:
-            - StripPrefix=1
+            - StripPrefix=0
 
         # ✅ Rota para Event Categories
-        - id: event-categories
+        - id: event-service
           uri: lb://e-ticket.event.core
           predicates:
-            - Path=/event-categories/**
+            - Path=/e-ticket/**
           filters:
             - StripPrefix=1
 

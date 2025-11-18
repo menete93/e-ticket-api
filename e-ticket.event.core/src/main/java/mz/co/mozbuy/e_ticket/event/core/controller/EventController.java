@@ -1,4 +1,5 @@
 package mz.co.mozbuy.e_ticket.event.core.controller;
+import mz.co.mozbuy.e_ticket.event.core.dto.EventDto;
 import mz.co.mozbuy.e_ticket.event.core.dto.EventRequestDTO;
 import lombok.RequiredArgsConstructor;
 import mz.co.mozbuy.e_ticket.event.core.model.EventEntity;
@@ -9,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/Event")
+@RequestMapping("/event")
 @RequiredArgsConstructor
 public class EventController {
 
@@ -34,7 +35,7 @@ public class EventController {
     }
 
     @GetMapping
-    public ResponseEntity<List<EventEntity>> findAll() {
+    public ResponseEntity<List<EventDto>> findAll() {
         return ResponseEntity.ok(eventService.findAll());
     }
 

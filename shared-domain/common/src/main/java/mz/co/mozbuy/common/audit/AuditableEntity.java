@@ -1,5 +1,6 @@
 package mz.co.mozbuy.common.audit;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -9,6 +10,8 @@ import org.hibernate.annotations.ParamDef;
 import org.springframework.data.annotation.*;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Getter
@@ -17,11 +20,15 @@ import java.time.LocalDateTime;
 @EntityListeners(AuditingEntityListener.class)
 @FilterDef(name = "softDeleteFilter", parameters = @ParamDef(name = "deletedState", type = Integer.class))
 @Filter(name = "softDeleteFilter", condition = "life_cycle_state <> :deletedState")
-public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> {
+public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 2027641277643165127L;
 
     // ==================== Auditoria ====================
     @CreatedDate
     @Column(name = "created_at", updatable = false, nullable = false)
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
 
     @CreatedBy
@@ -30,6 +37,7 @@ public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> {
 
     @LastModifiedDate
     @Column(name = "updated_at")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updatedAt;
 
     @LastModifiedBy

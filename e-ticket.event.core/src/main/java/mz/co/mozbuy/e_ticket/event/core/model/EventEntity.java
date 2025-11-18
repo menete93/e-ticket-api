@@ -6,10 +6,12 @@ import jakarta.persistence.*;
 import lombok.*;
 import mz.co.mozbuy.common.audit.AuditableEntity;
 import mz.co.mozbuy.common.audit.LifeCycleState;
+import mz.co.mozbuy.e_ticket.event.core.enums.TicketType;
 import org.locationtech.jts.geom.Point;
 import org.n52.jackson.datatype.jts.GeometryDeserializer;
 import org.n52.jackson.datatype.jts.GeometrySerializer;
 
+import java.io.Serial;
 import java.time.LocalDateTime;
 
 /**
@@ -25,6 +27,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class EventEntity extends AuditableEntity<Long, String> {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
 
     /**
      * voltar para criar a juncao com o user logado
@@ -57,7 +63,7 @@ public class EventEntity extends AuditableEntity<Long, String> {
     private Integer capacity;
 
     @Column(name = "seat_type", length = 20)
-    private String seatType = "FREE";
+    private TicketType seatType;
 
     @Column
     private Double latitude;
@@ -70,8 +76,6 @@ public class EventEntity extends AuditableEntity<Long, String> {
      * Necessita da dependência hibernate-spatial.
      */
     @Column(columnDefinition = "GEOGRAPHY(POINT,4326)")
-    @JsonSerialize(using = GeometrySerializer.class)
-    @JsonDeserialize(contentUsing = GeometryDeserializer.class)
     private Point location;
 
     @Column(name = "status", length = 20)

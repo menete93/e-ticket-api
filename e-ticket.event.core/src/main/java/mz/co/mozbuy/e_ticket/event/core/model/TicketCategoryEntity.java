@@ -56,7 +56,7 @@ public class TicketCategoryEntity extends AuditableEntity<Long, String> {
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> inviteCondition;
 
-    @Enumerated(EnumType.ORDINAL)
+    @Enumerated(EnumType.STRING)
     @Column(name = "life_cycle_state", nullable = false)
     private LifeCycleState lifeCycleState = LifeCycleState.ACTIVE;
 
