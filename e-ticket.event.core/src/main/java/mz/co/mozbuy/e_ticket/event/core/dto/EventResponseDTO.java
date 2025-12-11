@@ -1,8 +1,11 @@
+// EventResponseDTO.java
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import mz.co.mozbuy.e_ticket.event.core.model.EventCategory;
+import org.locationtech.jts.geom.Point;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -12,17 +15,15 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EventResponseDTO {
+
     private Long id;
     private String name;
     private String description;
-    private Double latitude;
-    private Double longitude;
-    private EventCategoryDTO category;
-    private List<EventTicketResponseDTO> tickets = new ArrayList<>();
+    private Point geographicLocation;
+    private EventCategory category;
     private LocalDateTime eventDate;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
-    private LocalDateTime registrationDeadline;
     private String coverImageUrl;
     private String bannerImageUrl;
     private Integer maxAttendees;
@@ -30,15 +31,27 @@ public class EventResponseDTO {
     private Boolean isPublic;
     private Boolean isFeatured;
     private Boolean isFree;
+    private LocalDateTime registrationDeadline;
     private Integer totalTickets;
     private Integer availableTickets;
     private Integer soldTickets;
     private Integer reservedTickets;
-    private Boolean hasAvailableTickets;
-    private Boolean isRegistrationOpen;
-    private Boolean isEventActive;
+    private List<TicketResponseDTO> tickets = new ArrayList<>();
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String createdBy;
     private String updatedBy;
+
+    // Métodos auxiliares
+    public boolean hasAvailableTickets() {
+        return availableTickets != null && availableTickets > 0;
+    }
+
+    public boolean isRegistrationOpen() {
+        return registrationDeadline == null || LocalDateTime.now().isBefore(registrationDeadline);
+    }
+
+    public boolean isEventActive() {
+        return eventDate == null || LocalDateTime.now().isBefore(eventDate);
+    }
 }

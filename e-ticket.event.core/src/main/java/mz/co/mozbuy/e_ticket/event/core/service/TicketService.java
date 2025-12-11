@@ -3,9 +3,11 @@ package mz.co.mozbuy.e_ticket.event.core.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import mz.co.mozbuy.e_ticket.event.core.dto.EventTicketRequestDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.EventTicketResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.TicketRequestDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.TicketResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
+import mz.co.mozbuy.e_ticket.event.core.exceptions.EventNotFoundException;
+import mz.co.mozbuy.e_ticket.event.core.mapper.EventTicketMapper;
 import mz.co.mozbuy.e_ticket.event.core.model.Event;
 import mz.co.mozbuy.e_ticket.event.core.model.EventTicket;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
@@ -21,18 +23,19 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class EventTicketService {
+public class TicketService {
 
     private final EventTicketRepository eventTicketRepository;
     private final EventRepository eventRepository;
+    private final EventTicketMapper eventTicketMapper; // Adicionar esta linha
 
     /**
      * Cria bilhetes durante a criação do evento
      */
     @Transactional
-    public List<EventTicket> createTicketsForEvent(Event event, List<EventTicketRequestDTO> ticketDTOs) {
+    public List<TicketResponseDTO> createTicketsForEvent(List<TicketRequestDTO> ticketDTOs) {
         return ticketDTOs.stream()
-                .map(ticketDTO -> createTicket(event, ticketDTO))
+                .map(this::createTicket)
                 .collect(Collectors.toList());
     }
 
@@ -40,28 +43,35 @@ public class EventTicketService {
      * Cria um bilhete individual
      */
     @Transactional
-    public EventTicketResponseDTO createTicket(EventTicketRequestDTO ticketDTO) {
+    public TicketResponseDTO createTicket(TicketRequestDTO ticketDTO ) {
+        // Buscar o evento
         Event event = eventRepository.findById(ticketDTO.getEventId())
                 .orElseThrow(() -> new RuntimeException("Event not found with id: " + ticketDTO.getEventId()));
 
-        EventTicket ticket = createTicket(event, ticketDTO);
+        // Criar o ticket
+        EventTicket ticket = createTicketEntity( ticketDTO);
         EventTicket savedTicket = eventTicketRepository.save(ticket);
 
+        // Associar o ticket ao evento e atualizar estatísticas
         event.addTicket(savedTicket);
         eventRepository.save(event);
 
-        log.info("Ticket created for event {}: {} - {}", ticketDTO.getEventId(), ticketDTO.getCategory(), ticketDTO.getTicketName());
-        return toDTO(savedTicket);
+        log.info("Ticket created for event {} by {}: {} - {}",
+                ticketDTO.getEventId(), ticketDTO.getCategory(), ticketDTO.getTicketName());
+
+        return eventTicketMapper.toDTO(savedTicket);
     }
 
-    public EventTicket createTicket(Event event, EventTicketRequestDTO ticketDTO) {
+    public EventTicket createTicketEntity(TicketRequestDTO ticketDTO) {
+        Event event = eventRepository.findById(ticketDTO.getEventId()).
+                orElseThrow(() -> new EventNotFoundException(ticketDTO.getEventId()));
+
         EventTicket ticket = new EventTicket();
         ticket.setEvent(event);
         ticket.setCategory(ticketDTO.getCategory());
         ticket.setTicketName(ticketDTO.getTicketName());
         ticket.setTotalQuantity(ticketDTO.getTotalQuantity());
         ticket.setAvailableQuantity(ticketDTO.getTotalQuantity());
-
         // CORREÇÃO AQUI: usar setCurrentPrice e setOriginalPrice
         BigDecimal price = ticketDTO.getPrice() != null ? ticketDTO.getPrice() : BigDecimal.ZERO;
         ticket.setCurrentPrice(price);
@@ -87,7 +97,7 @@ public class EventTicketService {
      * Atualiza um bilhete existente
      */
     @Transactional
-    public EventTicketResponseDTO updateTicket(Long eventId, Long ticketId, EventTicketRequestDTO ticketDTO) {
+    public TicketResponseDTO updateTicket(Long eventId, Long ticketId, TicketRequestDTO ticketDTO) {
         EventTicket ticket = eventTicketRepository.findById(ticketId)
                 .orElseThrow(() -> new RuntimeException("Ticket not found with id: " + ticketId));
 
@@ -131,6 +141,8 @@ public class EventTicketService {
      */
     @Transactional
     public List<EventTicket> createDefaultTickets(Event event, Integer totalCapacity) {
+
+
         List<EventTicket> defaultTickets = List.of(
                 createDefaultTicket(event, TicketCategory.GENERAL_ADMISSION,
                         (int) (totalCapacity * 0.6), // 60% capacidade
@@ -186,8 +198,8 @@ public class EventTicketService {
         return ticket;
     }
 
-    private EventTicketResponseDTO toDTO(EventTicket ticket) {
-        EventTicketResponseDTO dto = new EventTicketResponseDTO();
+    public TicketResponseDTO toDTO(EventTicket ticket) {
+        TicketResponseDTO dto = new TicketResponseDTO();
         dto.setId(ticket.getId());
         dto.setCategory(ticket.getCategory());
         dto.setTicketName(ticket.getTicketName());
@@ -214,4 +226,15 @@ public class EventTicketService {
         dto.setUpdatedBy(ticket.getUpdatedBy());
         return dto;
     }
+
+    /**
+     * Busca tickets por evento
+     */
+    @Transactional(readOnly = true)
+    public List<TicketResponseDTO> getTicketsByEventId(Long eventId) {
+        return eventTicketRepository.findByEventId(eventId).stream()
+                .map(this::toDTO) // Agora pode usar this::toDTO pois é público
+                .collect(Collectors.toList());
+    }
+
 }

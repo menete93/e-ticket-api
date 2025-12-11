@@ -37,4 +37,22 @@ public class EventCategoryDTO {
         this.colorCode = colorCode;
         this.iconUrl = iconUrl;
     }
+
+    // Construtor para query JPQL
+    public EventCategoryDTO(Long id, String name, String description, String colorCode,
+                            String iconUrl, Long eventsCount, Boolean isActive,
+                            LocalDateTime createdAt, LocalDateTime updatedAt,
+                            String createdBy, String updatedBy) {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+        this.colorCode = colorCode;
+        this.iconUrl = iconUrl;
+        this.eventsCount = eventsCount != null ? eventsCount.intValue() : 0;
+        this.isActive = isActive;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.createdBy = createdBy;
+        this.updatedBy = updatedBy;
+    }
 }

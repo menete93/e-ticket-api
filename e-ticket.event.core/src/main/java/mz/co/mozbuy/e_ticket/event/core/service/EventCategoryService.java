@@ -55,7 +55,7 @@ public class EventCategoryService {
      * Cria uma nova categoria
      */
     @Transactional
-    public EventCategoryDTO create(EventCategoryRequestDTO requestDTO, String createdBy) {
+    public EventCategoryDTO create(EventCategoryRequestDTO requestDTO) {
         // Verificar se já existe categoria com mesmo nome
         if (eventCategoryRepository.existsByNameIgnoreCase(requestDTO.getName())) {
             throw new RuntimeException("Category with name '" + requestDTO.getName() + "' already exists");
@@ -67,7 +67,6 @@ public class EventCategoryService {
         category.setColorCode(requestDTO.getColorCode());
         category.setIconUrl(requestDTO.getIconUrl());
         category.setCreatedAt(LocalDateTime.now());
-        category.setCreatedBy(createdBy);
 
         EventCategory savedCategory = eventCategoryRepository.save(category);
         log.info("Created event category: {}", savedCategory.getName());

@@ -33,6 +33,8 @@ eureka:
     fetch-registry: true
     service-url:
       defaultZone: http://localhost:8070/eureka/
+  instance:
+      preferIpAddress: true
 
 
 logging:
@@ -41,5 +43,5 @@ logging:
       springframework:
         security: ${SPRING_SECURITY_LOG_LEVEL:DEBUG}
   pattern:
-    console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
+    console: ${LOG PATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
 

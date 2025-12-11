@@ -14,7 +14,7 @@ import java.math.BigDecimal;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class EventTicketRequestDTO {
+public class TicketRequestDTO {
 
 
     @NotNull(message = "ticketId is required")
