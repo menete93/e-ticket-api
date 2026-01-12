@@ -1,8 +1,7 @@
 package mz.co.mozbuy.e_ticket.event.core.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import mz.co.mozbuy.common.audit.AuditableEntity;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
 
@@ -15,6 +14,9 @@ import java.util.List;
 @Table(name = "event_tickets")
 @Getter
 @Setter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class EventTicket extends AuditableEntity<Long, String> {
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -34,9 +36,11 @@ public class EventTicket extends AuditableEntity<Long, String> {
     @Column(name = "available_quantity", nullable = false)
     private Integer availableQuantity;
 
+    @Builder.Default
     @Column(name = "reserved_quantity", nullable = false)
     private Integer reservedQuantity = 0;
 
+    @Builder.Default
     @Column(name = "sold_quantity", nullable = false)
     private Integer soldQuantity = 0;
 
@@ -50,7 +54,7 @@ public class EventTicket extends AuditableEntity<Long, String> {
     private String description;
 
     @Column(name = "benefits", length = 1000)
-    private String benefits;
+    private List<String> benefits;
 
     @Column(name = "sales_start_date")
     private LocalDateTime salesStartDate;
@@ -58,9 +62,11 @@ public class EventTicket extends AuditableEntity<Long, String> {
     @Column(name = "sales_end_date")
     private LocalDateTime salesEndDate;
 
+    @Builder.Default
     @Column(name = "max_tickets_per_user")
     private Integer maxTicketsPerUser = 10;
 
+    @Builder.Default
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
@@ -77,19 +83,19 @@ public class EventTicket extends AuditableEntity<Long, String> {
     @OneToMany(mappedBy = "eventTicket", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<TicketPriceHistory> priceHistory = new ArrayList<>();
 
-    public EventTicket() {}
-
-    public EventTicket(Event event, TicketCategory category, String ticketName,
-                       Integer totalQuantity, BigDecimal price, String description) {
-        this.event = event;
-        this.category = category;
-        this.ticketName = ticketName;
-        this.totalQuantity = totalQuantity;
-        this.availableQuantity = totalQuantity;
-        this.currentPrice = price;
-        this.originalPrice = price;
-        this.description = description;
-    }
+//    public EventTicket() {}
+//
+//    public EventTicket(Event event, TicketCategory category, String ticketName,
+//                       Integer totalQuantity, BigDecimal price, String description) {
+//        this.event = event;
+//        this.category = category;
+//        this.ticketName = ticketName;
+//        this.totalQuantity = totalQuantity;
+//        this.availableQuantity = totalQuantity;
+//        this.currentPrice = price;
+//        this.originalPrice = price;
+//        this.description = description;
+//    }
 
     public boolean isAvailable() {
         return isActive && availableQuantity > 0 && isSalesPeriodActive();

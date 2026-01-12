@@ -140,62 +140,44 @@ CREATE TABLE pricing_strategies (
 
 -- Tabela de Bilhetes do Evento
 CREATE TABLE event_tickets (
-                               id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                               event_id BIGINT NOT NULL,
-
-    -- Categoria e nome do bilhete
-                               category VARCHAR(50) NOT NULL,
+                               id BIGSERIAL PRIMARY KEY,
+                               event_id BIGINT NOT NULL REFERENCES events(id),
+                               category VARCHAR(50) NOT NULL CHECK (
+                                   category IN ('NORMAL','VIP','VVIP','EARLY_BIRD','STUDENT','GROUP',
+                                                'CORPORATE','INVITATION','BACKSTAGE','MEET_GREET','TABLE_BOOKING',
+                                                'PREMIUM','NORMAL')
+                                   ),
                                ticket_name VARCHAR(100) NOT NULL,
-
-    -- Quantidades
                                total_quantity INT NOT NULL,
                                available_quantity INT NOT NULL,
                                reserved_quantity INT NOT NULL DEFAULT 0,
                                sold_quantity INT NOT NULL DEFAULT 0,
-
-    -- Preços
                                current_price DECIMAL(15,2),
                                original_price DECIMAL(15,2),
-
-    -- Descrição e benefícios
-                               description VARCHAR(1000),
-                               benefits VARCHAR(1000),
-
-    -- Período de vendas
-                               sales_start_date TIMESTAMP NULL,
-                               sales_end_date TIMESTAMP NULL,
-
-    -- Limites
+                               description TEXT,
+                               benefits TEXT,
+                               sales_start_date TIMESTAMP,
+                               sales_end_date TIMESTAMP,
                                max_tickets_per_user INT DEFAULT 10,
-
-    -- Flags
                                is_active BOOLEAN NOT NULL DEFAULT TRUE,
                                has_dynamic_pricing BOOLEAN NOT NULL DEFAULT FALSE,
-
-    -- Estratégia de preço associada
-                               pricing_strategy_id BIGINT NULL,
-
-    -- Auditoria
+                               pricing_strategy_id BIGINT REFERENCES pricing_strategies(id),
                                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                created_by VARCHAR(100) NOT NULL,
-                               updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                               updated_at TIMESTAMP,
                                updated_by VARCHAR(100),
                                life_cycle_state INT NOT NULL DEFAULT 1,
                                version BIGINT DEFAULT 0,
-
-    -- Chaves estrangeiras
-                               FOREIGN KEY (event_id) REFERENCES events(id),
-                               FOREIGN KEY (pricing_strategy_id) REFERENCES pricing_strategies(id),
-
-    -- Índices
-                               INDEX idx_ticket_event (event_id),
-                               INDEX idx_ticket_category (category),
-                               INDEX idx_ticket_active (is_active),
-                               INDEX idx_ticket_sales_dates (sales_start_date, sales_end_date),
-                               INDEX idx_ticket_pricing_strategy (pricing_strategy_id),
-                               INDEX idx_ticket_state (life_cycle_state),
-                               UNIQUE INDEX uk_ticket_event_category (event_id, category)
+                               UNIQUE (event_id, category)
 );
+
+-- Índices adicionais
+CREATE INDEX idx_ticket_event ON event_tickets(event_id);
+CREATE INDEX idx_ticket_category ON event_tickets(category);
+CREATE INDEX idx_ticket_active ON event_tickets(is_active);
+CREATE INDEX idx_ticket_sales_dates ON event_tickets(sales_start_date, sales_end_date);
+CREATE INDEX idx_ticket_pricing_strategy ON event_tickets(pricing_strategy_id);
+CREATE INDEX idx_ticket_state ON event_tickets(life_cycle_state);
 
 -- =============================================
 -- TABELAS DE GESTÃO DE PREÇOS DINÂMICOS

@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -17,7 +19,7 @@ import java.math.BigDecimal;
 public class TicketRequestDTO {
 
 
-    @NotNull(message = "ticketId is required")
+//    @NotNull(message = "ticketId is required")
     private Long ticketId;
     @NotNull(message = "eventId is required")
     private  Long eventId;
@@ -35,9 +37,9 @@ public class TicketRequestDTO {
     private BigDecimal price;
 
     private String description;
-    private String benefits;
-    private String salesStartDate;
-    private String salesEndDate;
+    private List<String> benefits;
+    private LocalDateTime salesStartDate;
+    private LocalDateTime salesEndDate;
     private Integer maxTicketsPerUser = 10;
-    private Boolean isActive = true;
+    private Boolean hasDynamicPricing = true;
 }

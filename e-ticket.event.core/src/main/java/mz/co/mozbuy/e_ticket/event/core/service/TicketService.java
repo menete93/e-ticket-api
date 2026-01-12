@@ -1,6 +1,7 @@
 package mz.co.mozbuy.e_ticket.event.core.service;
 
 
+import jakarta.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketRequestDTO;
@@ -12,11 +13,14 @@ import mz.co.mozbuy.e_ticket.event.core.model.Event;
 import mz.co.mozbuy.e_ticket.event.core.model.EventTicket;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventTicketRepository;
+import org.apache.kafka.common.errors.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -34,33 +38,73 @@ public class TicketService {
      */
     @Transactional
     public List<TicketResponseDTO> createTicketsForEvent(List<TicketRequestDTO> ticketDTOs) {
-        return ticketDTOs.stream()
-                .map(this::createTicket)
-                .collect(Collectors.toList());
+        return createTickets(ticketDTOs); // ✅ Já retorna List<TicketResponseDTO>
+
     }
 
     /**
      * Cria um bilhete individual
      */
     @Transactional
-    public TicketResponseDTO createTicket(TicketRequestDTO ticketDTO ) {
-        // Buscar o evento
-        Event event = eventRepository.findById(ticketDTO.getEventId())
-                .orElseThrow(() -> new RuntimeException("Event not found with id: " + ticketDTO.getEventId()));
+    public List<TicketResponseDTO> createTickets(List<TicketRequestDTO> ticketDTOs) {
+        if (ticketDTOs.isEmpty()) return Collections.emptyList();
 
-        // Criar o ticket
-        EventTicket ticket = createTicketEntity( ticketDTO);
-        EventTicket savedTicket = eventTicketRepository.save(ticket);
+        Long eventId = ticketDTOs.get(0).getEventId();
+        Event event = eventRepository.findByIdWithLock(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event"));
 
-        // Associar o ticket ao evento e atualizar estatísticas
-        event.addTicket(savedTicket);
-        eventRepository.save(event);
+        List<TicketResponseDTO> responses = new ArrayList<>();
 
-        log.info("Ticket created for event {} by {}: {} - {}",
-                ticketDTO.getEventId(), ticketDTO.getCategory(), ticketDTO.getTicketName());
+        for (TicketRequestDTO ticketDTO : ticketDTOs) {
+            validateTicketDTO(ticketDTO);
 
-        return eventTicketMapper.toDTO(savedTicket);
+            // ⭐⭐ AGORA O BUILDER FUNCIONA ⭐⭐
+            EventTicket ticket = EventTicket.builder()
+                    .event(event)
+                    .category(ticketDTO.getCategory())
+                    .ticketName(ticketDTO.getTicketName())
+                    .totalQuantity(ticketDTO.getTotalQuantity())
+                    .availableQuantity(ticketDTO.getTotalQuantity())  // Inicial = total
+                    .reservedQuantity(0)
+                    .soldQuantity(0)
+                    .currentPrice(ticketDTO.getPrice())
+                    .originalPrice(ticketDTO.getPrice())
+                    .description(ticketDTO.getDescription())
+                    .benefits(ticketDTO.getBenefits())  // Se existir no DTO
+                    .salesStartDate(ticketDTO.getSalesStartDate())  // Se existir
+                    .salesEndDate(ticketDTO.getSalesEndDate())  // Se existir
+                    .maxTicketsPerUser(ticketDTO.getMaxTicketsPerUser() != null ?
+                            ticketDTO.getMaxTicketsPerUser() : 10)
+                    .hasDynamicPricing(ticketDTO.getHasDynamicPricing() != null ?
+                            ticketDTO.getHasDynamicPricing() : false)
+                    .build();
+
+            EventTicket savedTicket = eventTicketRepository.save(ticket);
+            event.getTickets().add(savedTicket);
+            responses.add(eventTicketMapper.toDTO(savedTicket));
+        }
+
+        event.updateTicketStatistics();
+        return responses;
     }
+    // Método auxiliar para validação
+    private void validateTicketDTO(TicketRequestDTO dto) {
+        if (dto.getPrice() == null || dto.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ValidationException("Price must be greater than 0");
+        }
+
+        if (dto.getTotalQuantity() == null || dto.getTotalQuantity() <= 0) {
+            throw new ValidationException("Total quantity must be greater than 0");
+        }
+
+        if (dto.getTicketName() == null || dto.getTicketName().trim().isEmpty()) {
+            throw new ValidationException("Ticket name is required");
+        }
+    }
+
+
+
+
 
     public EventTicket createTicketEntity(TicketRequestDTO ticketDTO) {
         Event event = eventRepository.findById(ticketDTO.getEventId()).
@@ -80,14 +124,13 @@ public class TicketService {
         ticket.setDescription(ticketDTO.getDescription());
         ticket.setBenefits(ticketDTO.getBenefits());
         ticket.setMaxTicketsPerUser(ticketDTO.getMaxTicketsPerUser());
-        ticket.setIsActive(ticketDTO.getIsActive());
 
         // Definir datas de venda
         if (ticketDTO.getSalesStartDate() != null) {
-            ticket.setSalesStartDate(LocalDateTime.parse(ticketDTO.getSalesStartDate()));
+            ticket.setSalesStartDate(ticketDTO.getSalesStartDate());
         }
         if (ticketDTO.getSalesEndDate() != null) {
-            ticket.setSalesEndDate(LocalDateTime.parse(ticketDTO.getSalesEndDate()));
+            ticket.setSalesEndDate(ticketDTO.getSalesEndDate());
         }
 
         return ticket;
@@ -126,7 +169,7 @@ public class TicketService {
         ticket.setDescription(ticketDTO.getDescription());
         ticket.setBenefits(ticketDTO.getBenefits());
         ticket.setMaxTicketsPerUser(ticketDTO.getMaxTicketsPerUser());
-        ticket.setIsActive(ticketDTO.getIsActive());
+//        ticket.setIsActive(ticketDTO.getIsActive());
 
         EventTicket updatedTicket = eventTicketRepository.save(ticket);
         updatedTicket.getEvent().updateTicketStatistics();
@@ -144,7 +187,7 @@ public class TicketService {
 
 
         List<EventTicket> defaultTickets = List.of(
-                createDefaultTicket(event, TicketCategory.GENERAL_ADMISSION,
+                createDefaultTicket(event, TicketCategory.NORMAL,
                         (int) (totalCapacity * 0.6), // 60% capacidade
                         new BigDecimal("50.00"),
                         "General Admission",
@@ -156,7 +199,7 @@ public class TicketService {
                         "VIP Experience",
                         "VIP access with premium seating and services"),
 
-                createDefaultTicket(event, TicketCategory.V_VIP,
+                createDefaultTicket(event, TicketCategory.VVIP,
                         (int) (totalCapacity * 0.1), // 10% capacidade
                         new BigDecimal("300.00"),
                         "VVIP Premium",

@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/ticket")
 @RequiredArgsConstructor
@@ -18,10 +20,10 @@ public class TicketController {
     private final TicketService eventTicketService;
 
     @PostMapping
-    public ResponseEntity<TicketResponseDTO> createTicket(
-            @Valid @RequestBody TicketRequestDTO ticketDTO) {
+    public ResponseEntity<List<TicketResponseDTO>> createTicket(
+            @Valid @RequestBody List<TicketRequestDTO> ticketDTO) {
 
-        TicketResponseDTO createdTicket = eventTicketService.createTicket(ticketDTO);
+       List<TicketResponseDTO> createdTicket = eventTicketService.createTickets(ticketDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdTicket);
     }
 

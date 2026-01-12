@@ -1,6 +1,7 @@
 package mz.co.mozbuy.e_ticket.event.core.model;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -29,6 +30,7 @@ public class EventCategory extends AuditableEntity<Long, String> {
     private String iconUrl;
 
     @OneToMany(mappedBy = "category", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore  // ⚠️ Também ignora tickets para evitar outro loop
     private List<Event> events = new ArrayList<>();
 
     public EventCategory() {}

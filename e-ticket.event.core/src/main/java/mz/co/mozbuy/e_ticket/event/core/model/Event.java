@@ -1,6 +1,8 @@
 package mz.co.mozbuy.e_ticket.event.core.model;
 
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -45,18 +47,23 @@ public class Event extends AuditableEntity<Long, String> {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
     @NotNull(message = "Category is required")
+    @JsonIgnore  // ⚠️ Ignora esta propriedade na serialização
     private EventCategory category;
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     @Fetch(FetchMode.SUBSELECT)
+    @JsonIgnore  // ⚠️ Também ignora tickets para evitar outro loop
     private List<EventTicket> tickets = new ArrayList<>();
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     @Column(name = "event_date", nullable = false)
     private LocalDateTime eventDate;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     @Column(name = "start_time")
     private LocalDateTime startTime;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     @Column(name = "end_time")
     private LocalDateTime endTime;
 

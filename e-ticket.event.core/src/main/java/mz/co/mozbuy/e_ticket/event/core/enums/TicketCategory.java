@@ -1,9 +1,9 @@
 package mz.co.mozbuy.e_ticket.event.core.enums;
 
 public enum TicketCategory {
-    GENERAL_ADMISSION("General Admission", "Standard access to the event"),
+    NORMAL("NORMAL", "Standard access to the event"),
     VIP("VIP", "VIP access with exclusive benefits"),
-    V_VIP("VVIP", "Very VIP access with premium benefits"),
+    VVIP("VVIP", "Very VIP access with premium benefits"),
     EARLY_BIRD("Early Bird", "Early booking discount tickets"),
     STUDENT("Student", "Discounted tickets for students"),
     GROUP("Group", "Discounted tickets for groups"),
