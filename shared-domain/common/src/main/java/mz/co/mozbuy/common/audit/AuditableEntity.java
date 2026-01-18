@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import mz.co.mozbuy.common.converter.LifeCycleStateConverter;
 import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.ParamDef;
@@ -44,9 +45,9 @@ public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> implements
     private U updatedBy;
 
     // ==================== Ciclo de vida ====================
-//    @Convert(converter = LifeCycleStateConverter.class)
+    @Convert(converter = LifeCycleStateConverter.class)
     @Column(name = "life_cycle_state", nullable = false)
-    @Enumerated(EnumType.STRING)
+//    @Enumerated(EnumType.STRING)
     private LifeCycleState lifeCycleState = LifeCycleState.ACTIVE;
 
     // ==================== Métodos de ciclo de vida ====================

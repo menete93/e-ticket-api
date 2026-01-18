@@ -40,8 +40,19 @@ eureka:
 logging:
   level:
     org:
+      hibernate:
+        SQL: DEBUG
+        type: TRACE
+        orm:
+          jdbc: DEBUG
       springframework:
-        security: ${SPRING_SECURITY_LOG_LEVEL:DEBUG}
+        orm:
+          jpa: DEBUG
+        transaction: DEBUG
+      postgresql: DEBUG
+    com:
+      zaxxer:
+        hikari: DEBUG
   pattern:
-    console: ${LOG PATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
+    console: "%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n"
 

@@ -4,14 +4,11 @@ package mz.co.mozbuy.e_ticket.event.core.repository;
 import jakarta.persistence.LockModeType;
 import mz.co.mozbuy.e_ticket.event.core.model.EventCategory;
 import org.locationtech.jts.geom.Point;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import mz.co.mozbuy.e_ticket.event.core.model.Event;
-
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -50,5 +47,18 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
         @Lock(LockModeType.PESSIMISTIC_WRITE) // Evita concorrência
         @Query("SELECT e FROM Event e LEFT JOIN FETCH e.tickets WHERE e.id = :id")
         Optional<Event> findByIdWithLock(@Param("id") Long id);
+
+
+//    @Query("""
+//    SELECT DISTINCT e
+//    FROM Event e
+//    LEFT JOIN FETCH e.tickets
+//    WHERE e.lifeCycleState = :state
+//""")
+@EntityGraph(attributePaths = {"tickets"})
+List<Event> findByLifeCycleState(@Param("state") LifeCycleState state);
+
+
+
 
 }

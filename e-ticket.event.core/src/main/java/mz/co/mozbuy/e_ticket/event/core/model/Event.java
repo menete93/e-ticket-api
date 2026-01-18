@@ -50,9 +50,8 @@ public class Event extends AuditableEntity<Long, String> {
     @JsonIgnore  // ⚠️ Ignora esta propriedade na serialização
     private EventCategory category;
 
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    @Fetch(FetchMode.SUBSELECT)
-    @JsonIgnore  // ⚠️ Também ignora tickets para evitar outro loop
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<EventTicket> tickets = new ArrayList<>();
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")

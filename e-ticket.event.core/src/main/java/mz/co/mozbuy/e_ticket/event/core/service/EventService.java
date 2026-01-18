@@ -3,6 +3,7 @@ package mz.co.mozbuy.e_ticket.event.core.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.EventRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.EventResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.exceptions.CategoryNotFoundException;
@@ -122,9 +123,13 @@ public class EventService {
      */
     @Transactional(readOnly = true)
     public List<EventResponseDTO> getAllEvents() {
-        return eventRepository.findAll().stream()
+
+        List<EventResponseDTO> eventResponseDTOS;
+        eventResponseDTOS = eventRepository.findAll().stream()
                 .map(eventMapper::toDTO)
                 .collect(Collectors.toList());
+
+        return eventResponseDTOS;
     }
     /**
      * Deleta um evento (soft delete se estiver usando)
@@ -182,4 +187,15 @@ public class EventService {
 //
 //        return dto;
 //    }
+
+    public List<EventResponseDTO> findByState() {
+
+        List<EventResponseDTO> eventResponseDTOS;
+        eventResponseDTOS = eventRepository.findByLifeCycleState(LifeCycleState.ACTIVE).stream()
+                .map(eventMapper::toDTO)
+                .collect(Collectors.toList());
+
+        return eventResponseDTOS;
+    }
+
 }
