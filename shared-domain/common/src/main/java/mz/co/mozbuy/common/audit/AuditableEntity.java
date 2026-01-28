@@ -18,8 +18,6 @@ import java.time.LocalDateTime;
 @Setter
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
-@FilterDef(name = "softDeleteFilter", parameters = @ParamDef(name = "deletedState", type = Integer.class))
-@Filter(name = "softDeleteFilter", condition = "life_cycle_state <> :deletedState")
 public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> implements Serializable {
 
     @Serial
@@ -45,9 +43,8 @@ public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> implements
     private U updatedBy;
 
     // ==================== Ciclo de vida ====================
-    @Convert(converter = LifeCycleStateConverter.class)
-    @Column(name = "life_cycle_state", nullable = false)
-//    @Enumerated(EnumType.STRING)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "life_cycle_state", nullable = false, length = 50)
     private LifeCycleState lifeCycleState = LifeCycleState.ACTIVE;
 
     // ==================== Métodos de ciclo de vida ====================

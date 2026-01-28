@@ -3,6 +3,7 @@ package mz.co.mozbuy.e_ticket.event.core.model;
 import jakarta.persistence.*;
 import lombok.*;
 import mz.co.mozbuy.common.audit.AuditableEntity;
+import mz.co.mozbuy.common.converter.StringListConverter;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
 
 import java.math.BigDecimal;
@@ -54,6 +55,7 @@ public class EventTicket extends AuditableEntity<Long, String> {
     private String description;
 
     @Column(name = "benefits", length = 1000)
+    @Convert(converter = StringListConverter.class)
     private List<String> benefits;
 
     @Column(name = "sales_start_date")

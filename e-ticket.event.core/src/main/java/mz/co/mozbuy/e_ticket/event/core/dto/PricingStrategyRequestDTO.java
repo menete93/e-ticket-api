@@ -16,6 +16,7 @@ public class PricingStrategyRequestDTO {
 
     @NotNull(message = "Strategy name is required")
     private String strategyName;
+    
 
     @NotNull(message = "Strategy type is required")
     private String strategyType; // "FIXED", "DYNAMIC", "TIERED", etc.

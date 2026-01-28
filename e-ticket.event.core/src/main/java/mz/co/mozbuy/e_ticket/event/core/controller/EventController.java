@@ -5,6 +5,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import mz.co.mozbuy.e_ticket.event.core.dto.EventRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.EventResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.model.Event;
+import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
 import mz.co.mozbuy.e_ticket.event.core.service.EventService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +20,7 @@ import java.util.List;
 public class EventController {
 
     private final EventService eventService;
+    private final EventRepository eventRepository;
 
     @PostMapping
     public ResponseEntity<EventResponseDTO> createEvent(
@@ -57,4 +60,26 @@ public class EventController {
         eventService.deleteEvent(eventId, username);
         return ResponseEntity.noContent().build();
     }
+
+
+//    @GetMapping("/test-jpql")
+//    public ResponseEntity<String> testJPQL() {
+//        try {
+//            List<Event> events = eventRepository.findActiveEventsWithTickets();
+//
+//            if (!events.isEmpty()) {
+//                Event primeiro = events.get(0);
+//                return ResponseEntity.ok("Sucesso! " + events.size() + " eventos. " +
+//                        "Primeiro evento tem " + primeiro.getTickets().size() + " tickets");
+//            }
+//            return ResponseEntity.ok("Sucesso! " + events.size() + " eventos");
+//
+//        } catch (Exception e) {
+//            return ResponseEntity.status(500)
+//                    .body("Erro: " + e.getMessage());
+//        }
+//    }
+
+
+
 }

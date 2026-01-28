@@ -1,8 +1,9 @@
 package mz.co.mozbuy.e_ticket.event.core.enums;
 
 
+import lombok.Getter;
 
-
+@Getter
 public enum PricingStrategyType {
     FIXED("FIXED"),
     DYNAMIC("DYNAMIC"),
@@ -16,10 +17,6 @@ public enum PricingStrategyType {
 
     PricingStrategyType(String value) {
         this.value = value;
-    }
-
-    public String getValue() {
-        return value;
     }
 
     public static PricingStrategyType fromString(String value) {

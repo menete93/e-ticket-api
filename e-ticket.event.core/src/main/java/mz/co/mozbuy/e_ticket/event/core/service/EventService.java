@@ -4,8 +4,7 @@ package mz.co.mozbuy.e_ticket.event.core.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
-import mz.co.mozbuy.e_ticket.event.core.dto.EventRequestDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.EventResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.*;
 import mz.co.mozbuy.e_ticket.event.core.exceptions.CategoryNotFoundException;
 import mz.co.mozbuy.e_ticket.event.core.exceptions.EventNotFoundException;
 import mz.co.mozbuy.e_ticket.event.core.mapper.EventMapper;
@@ -13,12 +12,17 @@ import mz.co.mozbuy.e_ticket.event.core.model.Event;
 import mz.co.mozbuy.e_ticket.event.core.model.EventCategory;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventCategoryRepository;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
+import org.hibernate.Hibernate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
-
+@Transactional(readOnly = true)
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -188,14 +192,92 @@ public class EventService {
 //        return dto;
 //    }
 
-    public List<EventResponseDTO> findByState() {
+//    public List<EventResponseDTO> findByState() {
+//        // Agora use a query JPQL com JOIN FETCH
+//        List<Event> events = eventRepository.findActiveNativeCast();
+//
+//        if (events.isEmpty()) {
+//            // Teste sem JOIN primeiro
+//            List<Event> eventsWithoutTickets = eventRepository.findActiveNativeCast();
+//            System.out.println("Eventos sem tickets: " + eventsWithoutTickets.size());
+//
+//            // Verifique se há algum problema com a entidade EventTicket
+//            for (Event event : eventsWithoutTickets) {
+//                System.out.println("Evento ID: " + event.getId() + ", Nome: " + event.getName());
+//                try {
+//                    // Tente forçar o carregamento dos tickets
+//                    Hibernate.initialize(event.getTickets());
+//                    System.out.println("  Tickets: " + event.getTickets().size());
+//                } catch (Exception e) {
+//                    System.out.println("  ERRO ao carregar tickets: " + e.getMessage());
+//                }
+//            }
+//        }
+//
+//        return events.stream()
+//                .map(eventMapper::toDTO)
+//                .collect(Collectors.toList());
+//    }
 
-        List<EventResponseDTO> eventResponseDTOS;
-        eventResponseDTOS = eventRepository.findByLifeCycleState(LifeCycleState.ACTIVE).stream()
+
+    public List<EventResponseDTO> findByState() {
+        System.out.println("=== BUSCANDO EVENTOS ATIVOS ===");
+
+        // Use o método COM JOIN FETCH para carregar tickets
+        List<Event> events = eventRepository.findByLifeCycleState(LifeCycleState.ACTIVE);
+        System.out.println("Eventos encontrados com tickets: " + events.size());
+
+        if (!events.isEmpty()) {
+            Event primeiro = events.get(0);
+            System.out.println("Primeiro evento: " + primeiro.getName());
+            System.out.println("Tickets carregados: " + primeiro.getTickets().size());
+        }
+
+        // Converta para DTO
+        return events.stream()
                 .map(eventMapper::toDTO)
                 .collect(Collectors.toList());
-
-        return eventResponseDTOS;
     }
 
+
+
+
+
+        public List<EventWithTicketsDTO> getActiveEventsWithTickets() {
+            // 1. Busca projeção
+            List<EventRepository.EventWithTicketsProjection> projections =
+                    eventRepository.findActiveEventsWithTickets();
+
+            // 2. Agrupa por evento
+            Map<Long, EventWithTicketsDTO> eventMap = new LinkedHashMap<>();
+
+            for (EventRepository.EventWithTicketsProjection p : projections) {
+                Long eventId = p.getEventId();
+
+                if (!eventMap.containsKey(eventId)) {
+                    EventSimpleDTO eventDto = new EventSimpleDTO();
+                    eventDto.setId(eventId);
+                    eventDto.setName(p.getEventName());
+                    // Busca outros campos se necessário
+
+                    EventWithTicketsDTO dto = new EventWithTicketsDTO();
+                    dto.setEvent(eventDto);
+                    dto.setTickets(new ArrayList<>());
+                    eventMap.put(eventId, dto);
+                }
+
+                // Adiciona ticket se existir
+                if (p.getTicketId() != null) {
+                    TicketSimpleDTO ticketDto = new TicketSimpleDTO();
+                    ticketDto.setId(p.getTicketId());
+                    ticketDto.setTicketName(p.getTicketName());
+                    ticketDto.setPrice(p.getTicketPrice());
+
+                    eventMap.get(eventId).getTickets().add(ticketDto);
+                }
+            }
+
+            return new ArrayList<>(eventMap.values());
+
+    }
 }

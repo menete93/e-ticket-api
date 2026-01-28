@@ -1,30 +1,57 @@
 package mz.co.mozbuy.common.audit;
 
-
 import lombok.Getter;
 
 @Getter
 public enum LifeCycleState {
 
-    ACTIVE(0),
-    INACTIVE(1),
-    DELETED(2),
-    BLOCKED(3),
-    BANNED(4);
+    // ✅ VERSÃO CORRETA para @Enumerated(EnumType.STRING)
+    ACTIVE("ACTIVE", 0),
+    INACTIVE("INACTIVE", 1),
+    DELETED("DELETED", 2),
+    BLOCKED("BLOCKED", 3),
+    BANNED("BANNED", 4);
 
-    private final int code;
+    private final String dbValue;  // Valor no banco (string)
+    private final int code;        // Código numérico para lógica interna
 
-    LifeCycleState(int code) {
+    LifeCycleState(String dbValue, int code) {
+        this.dbValue = dbValue;
         this.code = code;
     }
 
+    // Converte do banco para enum
+    public static LifeCycleState fromDbValue(String dbValue) {
+        if (dbValue == null) return ACTIVE;
+
+        String normalized = dbValue.trim().toUpperCase();
+        for (LifeCycleState state : values()) {
+            if (state.dbValue.equals(normalized)) {
+                return state;
+            }
+        }
+
+        // Fallback: tenta pelo nome do enum
+        try {
+            return valueOf(normalized);
+        } catch (IllegalArgumentException e) {
+            return ACTIVE;
+        }
+    }
+
+    // Converte código para enum (mantém compatibilidade)
     public static LifeCycleState fromCode(int code) {
-        return switch (code) {
-            case 1 -> INACTIVE;
-            case 2 -> DELETED;
-            case 3 -> BLOCKED;
-            case 4 -> BANNED;
-            default -> ACTIVE;
-        };
+        for (LifeCycleState state : values()) {
+            if (state.code == code) {
+                return state;
+            }
+        }
+        return ACTIVE;
+    }
+
+    // Para JPQL/String comparação
+    @Override
+    public String toString() {
+        return this.dbValue;
     }
 }

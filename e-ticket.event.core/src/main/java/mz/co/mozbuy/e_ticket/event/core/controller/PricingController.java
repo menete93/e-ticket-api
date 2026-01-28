@@ -8,10 +8,15 @@ import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.ScheduledPriceChangeRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.ScheduledPriceChangeResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.enums.PricingStrategyType;
 import mz.co.mozbuy.e_ticket.event.core.service.PricingService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/pricing")
 @RequiredArgsConstructor
@@ -43,5 +48,12 @@ public class PricingController {
     public ResponseEntity<String> applyDynamicPricingToEvent(@PathVariable Long eventId) {
         pricingService.applyDynamicPricingToEvent(eventId);
         return ResponseEntity.ok("Dynamic pricing applied to event");
+    }
+
+    @GetMapping
+    public List<String> getAll() {
+        return Arrays.stream(PricingStrategyType.values())
+                .map(PricingStrategyType::getValue)
+                .toList();
     }
 }
