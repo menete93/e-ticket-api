@@ -1,6 +1,7 @@
 package mz.co.mozbuy.e_ticket.event.core.service;
 
 
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.model.EventTicket;
 import mz.co.mozbuy.e_ticket.event.core.model.PricingStrategy;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventTicketRepository;
@@ -169,7 +170,7 @@ public class DynamicPricingService {
     @Transactional
     public void applyDynamicPricing() {
         List<PricingStrategy> activeStrategies =
-                pricingStrategyRepository.findByIsActiveTrueAndApplyAutomaticallyTrue();
+                pricingStrategyRepository.findActiveAndAutoApplied();
 
         for (PricingStrategy strategy : activeStrategies) {
             try {
@@ -189,7 +190,7 @@ public class DynamicPricingService {
         List<EventTicket> tickets = eventTicketRepository.findByEventId(strategy.getEvent().getId());
 
         for (EventTicket ticket : tickets) {
-            if (ticket.getIsActive() && ticket.isSalesPeriodActive()) {
+            if (ticket.getLifeCycleState().equals(LifeCycleState.ACTIVE) && ticket.isSalesPeriodActive()) {
                 BigDecimal newPrice = calculateDynamicPrice(ticket, strategy);
 
                 // Aplicar mudança se for diferente do preço atual

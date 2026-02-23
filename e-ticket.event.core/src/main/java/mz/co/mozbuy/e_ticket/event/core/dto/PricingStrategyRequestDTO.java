@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import mz.co.mozbuy.common.audit.LifeCycleState;
 
 import java.math.BigDecimal;
 
@@ -38,6 +39,6 @@ public class PricingStrategyRequestDTO {
     private BigDecimal priceIncreasePercentage;
     private String description;
 
-    private Boolean isActive = true;
+    private LifeCycleState lifeCycleState = LifeCycleState.ACTIVE;
     private Boolean applyAutomatically = false;
 }

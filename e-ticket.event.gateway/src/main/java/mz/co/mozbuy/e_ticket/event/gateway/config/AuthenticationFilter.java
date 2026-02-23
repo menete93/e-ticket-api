@@ -29,12 +29,14 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             "/h2-console/",
             "/v3/api-docs",
             "/swagger-ui",
-            "/favicon.ico"
+            "/favicon.ico",
+            "/api/auth/register"
+
     );
 
     private static final List<String> ADMIN_ENDPOINTS = List.of(
-            "/event-categories/**",
-            "/api/auth/register"
+            "/event-categories/**"
+//            "/api/auth/register"
     );
 
     @Override

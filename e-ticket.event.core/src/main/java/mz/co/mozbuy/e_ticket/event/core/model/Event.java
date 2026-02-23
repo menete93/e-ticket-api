@@ -1,6 +1,5 @@
 package mz.co.mozbuy.e_ticket.event.core.model;
 
-
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
@@ -18,7 +17,7 @@ import org.locationtech.jts.geom.Point;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.math.BigDecimal; // 🔥 NOVO IMPORT
 
 @Entity
 @Table(name = "events")
@@ -49,6 +48,13 @@ public class Event extends AuditableEntity<Long, String> {
     @NotNull(message = "Category is required")
     @JsonIgnore  // ⚠️ Ignora esta propriedade na serialização
     private EventCategory category;
+
+    // 🔥🔥🔥 NOVO: RELACIONAMENTO COM ORGANIZADOR 🔥🔥🔥
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organizer_id", nullable = false)
+    @NotNull(message = "Organizer is required")
+    @JsonIgnore
+    private Organizer organizer;
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
@@ -102,6 +108,43 @@ public class Event extends AuditableEntity<Long, String> {
     @Column(name = "reserved_tickets")
     private Integer reservedTickets = 0;
 
+    // 🔥🔥🔥 NOVOS CAMPOS PARA ESTRATÉGIA HÍBRIDA 🔥🔥🔥
+
+    // Configuração de comissão específica para este evento (sobrescreve a do organizador)
+    @Column(name = "event_commission_rate", precision = 5, scale = 4)
+    private BigDecimal eventCommissionRate;
+
+    @Column(name = "event_flat_fee", precision = 10, scale = 2)
+    private BigDecimal eventFlatFee;
+
+    // Controle do período de trial (promoção de lançamento)
+    @Column(name = "is_trial_event")
+    private Boolean isTrialEvent = false;
+
+    // Estatísticas financeiras
+    @Column(name = "total_commission", precision = 15, scale = 2)
+    private BigDecimal totalCommission = BigDecimal.ZERO;
+
+    @Column(name = "total_organizer_payout", precision = 15, scale = 2)
+    private BigDecimal totalOrganizerPayout = BigDecimal.ZERO;
+
+    @Column(name = "total_sales", precision = 15, scale = 2)
+    private BigDecimal totalSales = BigDecimal.ZERO;
+
+    // 🔥🔥🔥 NOVOS RELACIONAMENTOS 🔥🔥🔥
+
+    // Cupons de desconto para este evento
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private List<DiscountCoupon> discountCoupons = new ArrayList<>();
+
+    // Histórico de vendas deste evento
+    @OneToMany(mappedBy = "event")
+    @JsonIgnore
+    private List<TicketSale> sales = new ArrayList<>();
+
+    // 🔥🔥🔥 CONSTRUTORES 🔥🔥🔥
+
     public Event() {}
 
     public Event(String name, String description, Point geographicLocation, EventCategory category, LocalDateTime eventDate) {
@@ -111,6 +154,19 @@ public class Event extends AuditableEntity<Long, String> {
         this.category = category;
         this.eventDate = eventDate;
     }
+
+    // 🔥🔥🔥 NOVO: Construtor com organizador 🔥🔥🔥
+    public Event(String name, String description, Point geographicLocation,
+                 EventCategory category, LocalDateTime eventDate, Organizer organizer) {
+        this.name = name;
+        this.description = description;
+        this.geographicLocation = geographicLocation;
+        this.category = category;
+        this.eventDate = eventDate;
+        this.organizer = organizer;
+    }
+
+    // 🔥🔥🔥 MÉTODOS EXISTENTES 🔥🔥🔥
 
     public void addTicket(EventTicket ticket) {
         tickets.add(ticket);
@@ -141,5 +197,191 @@ public class Event extends AuditableEntity<Long, String> {
 
     public boolean isEventActive() {
         return eventDate == null || LocalDateTime.now().isBefore(eventDate);
+    }
+
+    // 🔥🔥🔥 NOVOS MÉTODOS PARA ESTRATÉGIA HÍBRIDA 🔥🔥🔥
+
+    /**
+     * Obtém a taxa de comissão efetiva para este evento.
+     * Prioriza: 1) taxa específica do evento, 2) taxa do organizador, 3) padrão 5%
+     */
+    public BigDecimal getEffectiveCommissionRate() {
+        if (this.eventCommissionRate != null) {
+            return this.eventCommissionRate;
+        }
+        if (this.organizer != null && this.organizer.getCommissionRate() != null) {
+            return this.organizer.getCommissionRate();
+        }
+        return new BigDecimal("0.05"); // Padrão 5%
+    }
+
+    /**
+     * Obtém a taxa fixa efetiva por bilhete.
+     * Prioriza: 1) taxa específica do evento, 2) taxa do organizador, 3) padrão R$1,50
+     */
+    public BigDecimal getEffectiveFlatFee() {
+        if (this.eventFlatFee != null) {
+            return this.eventFlatFee;
+        }
+        if (this.organizer != null && this.organizer.getFlatFeePerTicket() != null) {
+            return this.organizer.getFlatFeePerTicket();
+        }
+        return new BigDecimal("1.50"); // Padrão R$1,50
+    }
+
+    /**
+     * Verifica se este evento é elegível para período de trial (0% comissão)
+     */
+    public boolean isEligibleForTrial() {
+        if (this.organizer == null) {
+            return false;
+        }
+
+        // Organizador ainda tem créditos de trial?
+        boolean hasTrialRemaining = this.organizer.isEventEligibleForTrial();
+
+        // Este evento foi marcado como trial?
+        boolean isMarkedAsTrial = Boolean.TRUE.equals(this.isTrialEvent);
+
+        boolean isFirstEvent = isFirstEventForOrganizer();
+
+        return hasTrialRemaining && (isMarkedAsTrial || isFirstEvent);
+    }
+
+    public boolean isFirstEventForOrganizer() {
+        if (this.organizer == null || this.organizer.getEvents() == null) {
+            return false;
+        }
+
+        // Contar eventos do organizador (excluindo este)
+        long otherEventsCount = this.organizer.getEvents().stream()
+                .filter(e -> e != null && !e.getId().equals(this.getId()))
+                .count();
+
+        return otherEventsCount == 0;
+    }
+
+    /**
+     * Marca este evento como tendo usado o crédito de trial
+     */
+    public void markAsTrialUsed() {
+        this.isTrialEvent = false;
+        if (this.organizer != null) {
+            this.organizer.consumeTrialEvent();
+        }
+    }
+
+    /**
+     * Atualiza estatísticas financeiras após uma venda
+     */
+    public void updateFinancialStats(BigDecimal saleAmount, BigDecimal commission, BigDecimal payout) {
+        // Inicializar se necessário
+        if (this.totalSales == null) this.totalSales = BigDecimal.ZERO;
+        if (this.totalCommission == null) this.totalCommission = BigDecimal.ZERO;
+        if (this.totalOrganizerPayout == null) this.totalOrganizerPayout = BigDecimal.ZERO;
+
+        // Atualizar valores
+        this.totalSales = this.totalSales.add(saleAmount);
+        this.totalCommission = this.totalCommission.add(commission);
+        this.totalOrganizerPayout = this.totalOrganizerPayout.add(payout);
+    }
+
+    /**
+     * Adiciona um cupom de desconto a este evento
+     */
+    public void addDiscountCoupon(DiscountCoupon coupon) {
+        if (this.discountCoupons == null) {
+            this.discountCoupons = new ArrayList<>();
+        }
+        this.discountCoupons.add(coupon);
+        coupon.setEvent(this);
+    }
+
+    /**
+     * Encontra um cupom válido pelo código
+     */
+    public DiscountCoupon findValidCoupon(String code) {
+        if (this.discountCoupons == null || code == null || code.trim().isEmpty()) {
+            return null;
+        }
+
+        return this.discountCoupons.stream()
+                .filter(coupon -> code.equalsIgnoreCase(coupon.getCode()))
+                .filter(DiscountCoupon::isValid)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Calcula a receita atual do evento (apenas vendas pagas)
+     */
+    public BigDecimal calculateCurrentRevenue() {
+        if (this.sales == null || this.sales.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+
+        return this.sales.stream()
+                .filter(sale -> sale != null && "PAID".equals(sale.getStatus()))
+                .map(sale -> sale.getTotalAmount() != null ? sale.getTotalAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Verifica se o evento pode aceitar mais vendas
+     */
+    public boolean canAcceptMoreSales() {
+        if (this.maxAttendees != null && this.maxAttendees > 0) {
+            return this.soldTickets < this.maxAttendees;
+        }
+        return true;
+    }
+
+    /**
+     * Calcula a comissão para uma venda específica
+     */
+    public BigDecimal calculateCommissionForSale(BigDecimal saleAmount, Integer quantity) {
+        if (this.isEligibleForTrial()) {
+            return BigDecimal.ZERO; // Trial: 0% de comissão
+        }
+
+        // ESTRATÉGIA HÍBRIDA: Taxa fixa + Percentual
+        BigDecimal commission = BigDecimal.ZERO;
+
+        // 1. Taxa fixa por bilhete
+        BigDecimal flatFee = this.getEffectiveFlatFee();
+        if (flatFee.compareTo(BigDecimal.ZERO) > 0) {
+            commission = commission.add(flatFee.multiply(BigDecimal.valueOf(quantity)));
+        }
+
+        // 2. Percentual sobre o total
+        BigDecimal commissionRate = this.getEffectiveCommissionRate();
+        if (commissionRate.compareTo(BigDecimal.ZERO) > 0) {
+            commission = commission.add(saleAmount.multiply(commissionRate));
+        }
+
+        return commission.max(BigDecimal.ZERO);
+    }
+
+    /**
+     * Método auxiliar: cria evento marcado como trial se organizador for elegível
+     */
+    public static Event createTrialEvent(String name, String description, Point geographicLocation,
+                                         EventCategory category, LocalDateTime eventDate,
+                                         Organizer organizer) {
+        Event event = new Event(name, description, geographicLocation, category, eventDate, organizer);
+
+        if (organizer.isEventEligibleForTrial()) {
+            event.setIsTrialEvent(true);
+        }
+
+        return event;
+    }
+
+    /**
+     * Obtém o payout para o organizador após deduzir comissão
+     */
+    public BigDecimal calculateOrganizerPayout(BigDecimal saleAmount, BigDecimal commission) {
+        return saleAmount.subtract(commission != null ? commission : BigDecimal.ZERO)
+                .max(BigDecimal.ZERO);
     }
 }

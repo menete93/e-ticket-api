@@ -1,8 +1,11 @@
 package mz.co.mozbuy.common.security;
 
 
+import lombok.Getter;
+
 import java.util.List;
 
+@Getter
 public class UserContext {
 
     private static final ThreadLocal<UserContext> currentUserContext = new ThreadLocal<>();
@@ -15,18 +18,6 @@ public class UserContext {
         this.username = username;
         this.roles = roles;
         this.token = token;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public List<String> getRoles() {
-        return roles;
-    }
-
-    public String getToken() {
-        return token;
     }
 
     public boolean hasRole(String role) {

@@ -29,7 +29,7 @@ public class SafeEventTicketMapper {
         // ✅ Campos simples
         try { dto.setDescription(ticket.getDescription()); } catch (Exception e) { /* ignora */ }
         try { dto.setMaxTicketsPerUser(ticket.getMaxTicketsPerUser()); } catch (Exception e) { /* ignora */ }
-        try { dto.setIsActive(ticket.getIsActive()); } catch (Exception e) { /* ignora */ }
+        try { dto.setLifeCycleState(ticket.getLifeCycleState()); } catch (Exception e) { /* ignora */ }
 
         // ⚠️ CAMPOS PERIGOSOS (pulam se falharem)
         try {

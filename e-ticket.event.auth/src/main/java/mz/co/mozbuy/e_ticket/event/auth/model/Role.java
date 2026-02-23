@@ -9,9 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import mz.co.mozbuy.common.audit.DomainEntity;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Data
 @Builder
@@ -33,6 +31,11 @@ public class Role extends DomainEntity<Long> {
             joinColumns = @JoinColumn(name = "role_id"),
             inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
-    @Builder.Default
-    private List<Permission> permissions = new ArrayList<>();
+    private Set<Permission> permissions = new HashSet<>();
+
+    public Role(String name) {
+        this.name = name;
+        this.permissions = new HashSet<>();
+    }
+
 }

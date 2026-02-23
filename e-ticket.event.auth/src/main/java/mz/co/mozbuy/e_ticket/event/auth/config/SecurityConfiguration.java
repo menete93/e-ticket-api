@@ -13,35 +13,39 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfiguration {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http,
-            UserDetailsService userDetailsService
-    ) throws Exception {
-        return http
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
                 .csrf(csrf -> csrf.disable())
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/auth/**",           // ✅ Login público
-                                "/api/auth/**",       // ✅ Login público
-                                "/h2-console/**",     // ✅ Console H2
-                                "/actuator/**",       // ✅ Health checks
-                                "/error"              // ✅ Página de erro
+                                "/api/auth/**",
+                                "/h2-console/**",
+                                "/actuator/**",
+                                "/error"
                         ).permitAll()
-                        .requestMatchers("/e-ticket/**").authenticated() // ✅ Protegido
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+//                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authenticationProvider(authenticationProvider(userDetailsService))
-                // ❌ REMOVIDO: .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .build();
+                .addFilterBefore(
+                        new HeaderAuthenticationFilter(),
+                        UsernamePasswordAuthenticationFilter.class
+                );
+
+        return http.build();
     }
+
+
+
 
     @Bean
     public AuthenticationProvider authenticationProvider(UserDetailsService userDetailsService) {

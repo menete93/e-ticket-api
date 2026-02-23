@@ -1,5 +1,12 @@
 server:
   port: 8080
+
+feign:
+  oauth:
+    client-id: "meu-servico"
+    client-secret: "segredo123"
+    token-url: "http://localhost:8085/oauth2/token"
+
 spring:
   application:
     name: e-ticket.event.core

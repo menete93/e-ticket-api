@@ -6,17 +6,16 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
+import mz.co.mozbuy.e_ticket.event.auth.model.Role;
 import mz.co.mozbuy.e_ticket.event.auth.model.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
-import java.util.Base64;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -35,11 +34,40 @@ public class JwtService {
 
     public String generateToken(User user) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("role", user.getRole().getName());
+
+        // ✅ Extrai os nomes das roles
+        List<String> roleNames = user.getRoles().stream()
+                .map(Role::getName)
+                .collect(Collectors.toList());
+
+        // ✅ Extrai todas as authorities (roles + permissions)
+        List<String> authorities = new ArrayList<>();
+        user.getRoles().forEach(role -> {
+            authorities.add("ROLE_" + role.getName()); // Adiciona role com prefixo
+            role.getPermissions().forEach(permission -> {
+                authorities.add(permission.getName()); // Adiciona permissões
+            });
+        });
+
+        claims.put("roles", roleNames);
+        claims.put("authorities", authorities); // 🆕 Adiciona authorities no token
         claims.put("email", user.getEmail());
         claims.put("userId", user.getId());
         claims.put("firstName", user.getFirstName());
         claims.put("lastName", user.getLastName());
+        claims.put("lifecyclestate", user.getLifeCycleState());
+        claims.put("isOrganizer", user.getIsOrganizer());
+
+        // Se for organizador, podemos adicionar um objeto organizer com mais dados, se disponíveis.
+        if (Boolean.TRUE.equals(user.getIsOrganizer()) && user.getOrganizerReferenceId() != null) {
+            // Criar um mapa com os dados do organizador que já estão no Auth Service
+            Map<String, Object> organizerClaims = new HashMap<>();
+            organizerClaims.put("referenceId", user.getOrganizerReferenceId());
+            // Se você tiver mais campos no User relacionados ao organizador, adicione aqui.
+            // Exemplo: organizerClaims.put("companyName", user.getCompanyName());
+
+            claims.put("organizer", organizerClaims);
+        }
 
         return buildToken(claims, user.getUsername());
     }

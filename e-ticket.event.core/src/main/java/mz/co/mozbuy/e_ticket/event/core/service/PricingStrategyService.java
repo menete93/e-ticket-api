@@ -4,6 +4,7 @@ package mz.co.mozbuy.e_ticket.event.core.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.model.Event;
@@ -29,7 +30,7 @@ public class PricingStrategyService {
                 .orElseThrow(() -> new RuntimeException("Event not found with id: " + requestDTO.getEventId()));
 
         // Verificar se já existe estratégia com mesmo nome
-        if (pricingStrategyRepository.existsByEventIdAndStrategyNameAndIsActiveTrue(
+        if (pricingStrategyRepository.existsActiveStrategy(
                 requestDTO.getEventId(), requestDTO.getStrategyName())) {
             throw new RuntimeException("Pricing strategy with name '" + requestDTO.getStrategyName() + "' already exists for this event");
         }
@@ -48,7 +49,7 @@ public class PricingStrategyService {
         strategy.setGroupDiscountPercentage(requestDTO.getGroupDiscountPercentage());
         strategy.setDemandThresholdPercentage(requestDTO.getDemandThresholdPercentage());
         strategy.setPriceIncreasePercentage(requestDTO.getPriceIncreasePercentage());
-        strategy.setIsActive(requestDTO.getIsActive());
+        strategy.setLifeCycleState(requestDTO.getLifeCycleState());
         strategy.setApplyAutomatically(requestDTO.getApplyAutomatically());
         strategy.setDescription(requestDTO.getDescription());
         strategy.setCreatedBy(createdBy);
@@ -82,7 +83,7 @@ public class PricingStrategyService {
         strategy.setGroupDiscountPercentage(requestDTO.getGroupDiscountPercentage());
         strategy.setDemandThresholdPercentage(requestDTO.getDemandThresholdPercentage());
         strategy.setPriceIncreasePercentage(requestDTO.getPriceIncreasePercentage());
-        strategy.setIsActive(requestDTO.getIsActive());
+        strategy.setLifeCycleState(requestDTO.getLifeCycleState());
         strategy.setApplyAutomatically(requestDTO.getApplyAutomatically());
         strategy.setDescription(requestDTO.getDescription());
 
@@ -97,8 +98,9 @@ public class PricingStrategyService {
         PricingStrategy strategy = pricingStrategyRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Pricing strategy not found with id: " + id));
 
-        strategy.setIsActive(false);
+        strategy.setLifeCycleState(LifeCycleState.DELETED);
         pricingStrategyRepository.save(strategy);
+
 
         log.info("Deactivated pricing strategy: {}", strategy.getStrategyName());
     }
@@ -108,7 +110,7 @@ public class PricingStrategyService {
         PricingStrategy strategy = pricingStrategyRepository.findById(strategyId)
                 .orElseThrow(() -> new RuntimeException("Pricing strategy not found with id: " + strategyId));
 
-        if (!strategy.getIsActive()) {
+        if (!strategy.getLifeCycleState().equals(LifeCycleState.ACTIVE)) {
             throw new RuntimeException("Pricing strategy is not active");
         }
 
@@ -136,7 +138,7 @@ public class PricingStrategyService {
         dto.setGroupDiscountPercentage(strategy.getGroupDiscountPercentage());
         dto.setDemandThresholdPercentage(strategy.getDemandThresholdPercentage());
         dto.setPriceIncreasePercentage(strategy.getPriceIncreasePercentage());
-        dto.setIsActive(strategy.getIsActive());
+        dto.setLifeCycleState(strategy.getLifeCycleState());
         dto.setApplyAutomatically(strategy.getApplyAutomatically());
         dto.setLastAppliedAt(strategy.getLastAppliedAt());
         dto.setDescription(strategy.getDescription());

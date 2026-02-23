@@ -34,8 +34,8 @@ public class DebugFieldController {
             List<EventRepository.EventWithTicketsProjection> events = eventRepository.findActiveEventsWithTickets();
 
             if (!events.isEmpty()) {
-                Event event = (Event) events.get(0);
-                EventTicket ticket = event.getTickets().get(0);  // Primeiro ticket
+                Event event = (Event) events.getFirst();
+                EventTicket ticket = event.getTickets().getFirst();  // Primeiro ticket
 
                 // Teste CADA campo individualmente
                 result.put("ticketId", ticket.getId());
@@ -102,8 +102,8 @@ public class DebugFieldController {
             List<EventRepository.EventWithTicketsProjection> events = eventRepository.findActiveEventsWithTickets();
 
             if (!events.isEmpty()) {
-                Event event = (Event) events.get(0);
-                EventTicket ticket = event.getTickets().get(0);
+                Event event = (Event) events.getFirst();
+                EventTicket ticket = event.getTickets().getFirst();
 
                 Map<String, Object> result = new HashMap<>();
                 result.put("ticketId", ticket.getId());
@@ -122,7 +122,7 @@ public class DebugFieldController {
 
         } catch (Exception e) {
             return ResponseEntity.status(500)
-                    .body("ERRO: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                    .body("ERROR: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
 }

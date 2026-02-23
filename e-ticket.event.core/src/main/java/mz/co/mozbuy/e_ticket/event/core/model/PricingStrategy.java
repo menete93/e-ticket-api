@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import mz.co.mozbuy.common.audit.AuditableEntity;
+import mz.co.mozbuy.common.audit.LifeCycleState;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -53,9 +55,6 @@ public class PricingStrategy extends AuditableEntity<Long, String> {
     @Column(name = "price_increase_percentage", precision = 5, scale = 2)
     private BigDecimal priceIncreasePercentage;
 
-    @Column(name = "is_active", nullable = false)
-    private Boolean isActive = true;
-
     @Column(name = "apply_automatically", nullable = false)
     private Boolean applyAutomatically = false;
 
@@ -74,7 +73,7 @@ public class PricingStrategy extends AuditableEntity<Long, String> {
     }
 
     public boolean canApplyAutomatically() {
-        return isActive && applyAutomatically;
+        return this.getLifeCycleState().equals(LifeCycleState.ACTIVE) && applyAutomatically;
     }
 
     public boolean hasPriceLimits() {
@@ -85,9 +84,6 @@ public class PricingStrategy extends AuditableEntity<Long, String> {
         if (minPrice != null && price.compareTo(minPrice) < 0) {
             return false;
         }
-        if (maxPrice != null && price.compareTo(maxPrice) > 0) {
-            return false;
-        }
-        return true;
+        return maxPrice == null || price.compareTo(maxPrice) <= 0;
     }
 }

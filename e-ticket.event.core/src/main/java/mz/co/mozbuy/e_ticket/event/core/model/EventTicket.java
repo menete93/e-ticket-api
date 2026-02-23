@@ -3,6 +3,7 @@ package mz.co.mozbuy.e_ticket.event.core.model;
 import jakarta.persistence.*;
 import lombok.*;
 import mz.co.mozbuy.common.audit.AuditableEntity;
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.common.converter.StringListConverter;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
 
@@ -68,10 +69,6 @@ public class EventTicket extends AuditableEntity<Long, String> {
     @Column(name = "max_tickets_per_user")
     private Integer maxTicketsPerUser = 10;
 
-    @Builder.Default
-    @Column(name = "is_active", nullable = false)
-    private Boolean isActive = true;
-
     @Column(name = "has_dynamic_pricing", nullable = false)
     private Boolean hasDynamicPricing = false;
 
@@ -85,22 +82,8 @@ public class EventTicket extends AuditableEntity<Long, String> {
     @OneToMany(mappedBy = "eventTicket", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<TicketPriceHistory> priceHistory = new ArrayList<>();
 
-//    public EventTicket() {}
-//
-//    public EventTicket(Event event, TicketCategory category, String ticketName,
-//                       Integer totalQuantity, BigDecimal price, String description) {
-//        this.event = event;
-//        this.category = category;
-//        this.ticketName = ticketName;
-//        this.totalQuantity = totalQuantity;
-//        this.availableQuantity = totalQuantity;
-//        this.currentPrice = price;
-//        this.originalPrice = price;
-//        this.description = description;
-//    }
-
     public boolean isAvailable() {
-        return isActive && availableQuantity > 0 && isSalesPeriodActive();
+        return this.getLifeCycleState().equals(LifeCycleState.ACTIVE) && availableQuantity > 0 && isSalesPeriodActive();
     }
 
     public boolean isSalesPeriodActive() {

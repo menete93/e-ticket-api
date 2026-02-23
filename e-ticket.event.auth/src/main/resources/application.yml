@@ -1,6 +1,14 @@
 server:
   port: 8082
 
+ticket-service:
+  url: http://localhost:8085
+
+feign:
+  auth:
+    username: kiko_menete           # Credenciais que funcionam
+    password: password123           # Senha correta
+    login-url: http://localhost:8085/api/auth/login
 spring:
   application:
     name: "e-ticket.event.auth"

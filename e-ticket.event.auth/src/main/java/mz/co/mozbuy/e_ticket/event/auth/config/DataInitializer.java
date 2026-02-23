@@ -14,8 +14,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 @Slf4j
 @Configuration
@@ -32,7 +31,6 @@ public class DataInitializer {
             PermissionRepository permissionRepository) {
 
         return args -> {
-            // Só executa se não houver usuários
             if (userRepository.count() > 0) {
                 log.info("Dados já inicializados. Pulando inicialização.");
                 return;
@@ -40,7 +38,7 @@ public class DataInitializer {
 
             log.info("Inicializando dados do sistema...");
 
-            // 1. Criar Permissões
+            // 1️⃣ Criar Permissões
             List<Permission> permissions = Arrays.asList(
                     createPermissionIfNotFound("USER_READ", "Ler informações de usuário"),
                     createPermissionIfNotFound("USER_WRITE", "Criar/editar usuários"),
@@ -54,73 +52,61 @@ public class DataInitializer {
                     createPermissionIfNotFound("TICKET_WRITE", "Criar/editar tickets"),
                     createPermissionIfNotFound("ADMIN_ACCESS", "Acesso administrativo completo")
             );
-
             permissionRepository.saveAll(permissions);
             log.info("Permissões criadas: {}", permissions.size());
 
-            // 2. Criar Roles (PRIMEIRO salvar as roles vazias)
-            Role adminRole = roleRepository.save(
-                    Role.builder()
-                            .name("ADMIN")
-                            .description("Administrador do sistema")
-                            .build()
-            );
+            // 2️⃣ Criar Roles
+            Role adminRole = Role.builder()
+                    .name("ADMIN")
+                    .description("Administrador do sistema")
+                    .permissions(new HashSet<>(permissions)) // Admin tem todas as permissões
+                    .build();
 
-            Role userRole = roleRepository.save(
-                    Role.builder()
-                            .name("USER")
-                            .description("Usuário normal do sistema")
-                            .build()
-            );
+            Role userRole = Role.builder()
+                    .name("USER")
+                    .description("Usuário normal do sistema")
+                    .permissions(new HashSet<>(Arrays.asList(
+                            findPermissionByName(permissions, "USER_READ"),
+                            findPermissionByName(permissions, "EVENT_READ"),
+                            findPermissionByName(permissions, "TICKET_READ"),
+                            findPermissionByName(permissions, "TICKET_WRITE")
+                    )))
+                    .build();
 
-            log.info("Roles criadas: ADMIN, USER");
-
-            // 3. Associar permissões às roles (AGORA com as roles já salvas)
-            adminRole.setPermissions(permissions); // Admin tem todas as permissões
-
-            userRole.setPermissions(Arrays.asList(
-                    findPermissionByName(permissions, "USER_READ"),
-                    findPermissionByName(permissions, "EVENT_READ"),
-                    findPermissionByName(permissions, "TICKET_READ"),
-                    findPermissionByName(permissions, "TICKET_WRITE")
-            ));
-
-            // Salvar as roles com as permissões associadas
             roleRepository.saveAll(Arrays.asList(adminRole, userRole));
-            log.info("Permissões associadas às roles");
+            log.info("Roles criadas e permissões associadas: ADMIN, USER");
 
-            // 4. Criar Usuário Admin
+            // 3️⃣ Criar Usuário Admin
             User adminUser = User.builder()
                     .username("admin")
                     .email("admin@eticket.com")
                     .password(passwordEncoder.encode("admin123"))
                     .firstName("Administrador")
                     .lastName("do Sistema")
-                    .role(adminRole) // ✅ Role já está salva no banco
+                    .roles(new HashSet<>(Collections.singletonList(adminRole))) // ✅ ADMIN
                     .enabled(true)
                     .accountNonExpired(true)
                     .accountNonLocked(true)
                     .credentialsNonExpired(true)
                     .build();
-
             adminUser.setCreatedBy("system");
 
-            // 5. Criar Usuário Normal
+            // 4️⃣ Criar Usuário Normal
             User normalUser = User.builder()
                     .username("joao.silva")
                     .email("joao.silva@email.com")
                     .password(passwordEncoder.encode("password123"))
                     .firstName("João")
                     .lastName("Silva")
-                    .role(userRole) // ✅ Role já está salva no banco
+                    .roles(new HashSet<>(Collections.singletonList(userRole))) // ✅ USER
                     .enabled(true)
                     .accountNonExpired(true)
                     .accountNonLocked(true)
                     .credentialsNonExpired(true)
                     .build();
-
             normalUser.setCreatedBy("system");
 
+            // 5️⃣ Salvar usuários
             userRepository.saveAll(Arrays.asList(adminUser, normalUser));
             log.info("Usuários criados: admin, joao.silva");
 

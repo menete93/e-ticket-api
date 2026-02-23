@@ -10,6 +10,7 @@ import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
 import mz.co.mozbuy.e_ticket.event.core.service.EventService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class EventController {
     private final EventRepository eventRepository;
 
     @PostMapping
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<EventResponseDTO> createEvent(
             @Valid @RequestBody EventRequestDTO eventDTO) {
 
@@ -31,14 +33,14 @@ public class EventController {
     }
 
     @GetMapping("/{eventId}")
-    public ResponseEntity<EventResponseDTO> getEvent(@PathVariable Long eventId) {
+    public ResponseEntity<EventResponseDTO> getEvent( @PathVariable("eventId") Long eventId) {
         EventResponseDTO event = eventService.getEventById(eventId);
         return ResponseEntity.ok(event);
     }
 
     @PutMapping("/{eventId}")
     public ResponseEntity<EventResponseDTO> updateEvent(
-            @PathVariable Long eventId,
+            @PathVariable("eventId") Long eventId,
             @Valid @RequestBody EventRequestDTO eventDTO
          ) {
 
@@ -54,32 +56,12 @@ public class EventController {
 
     @DeleteMapping("/{eventId}")
     public ResponseEntity<Void> deleteEvent(
-            @PathVariable Long eventId,
+            @PathVariable("eventId") Long eventId,
             @RequestHeader("X-User-Id") String username) {
 
         eventService.deleteEvent(eventId, username);
         return ResponseEntity.noContent().build();
     }
-
-
-//    @GetMapping("/test-jpql")
-//    public ResponseEntity<String> testJPQL() {
-//        try {
-//            List<Event> events = eventRepository.findActiveEventsWithTickets();
-//
-//            if (!events.isEmpty()) {
-//                Event primeiro = events.get(0);
-//                return ResponseEntity.ok("Sucesso! " + events.size() + " eventos. " +
-//                        "Primeiro evento tem " + primeiro.getTickets().size() + " tickets");
-//            }
-//            return ResponseEntity.ok("Sucesso! " + events.size() + " eventos");
-//
-//        } catch (Exception e) {
-//            return ResponseEntity.status(500)
-//                    .body("Erro: " + e.getMessage());
-//        }
-//    }
-
 
 
 }

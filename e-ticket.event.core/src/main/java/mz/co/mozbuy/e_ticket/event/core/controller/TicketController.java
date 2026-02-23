@@ -37,10 +37,19 @@ public class TicketController {
 
     @PostMapping("/default")
     public ResponseEntity<String> createDefaultTickets(
-            @PathVariable Long eventId) {
+            @PathVariable("default") Long eventId) {
 
         // Buscar evento e criar bilhetes padrão
         // eventTicketService.createDefaultTickets(event, capacity);
         return ResponseEntity.ok("Default tickets created successfully");
     }
+
+    @GetMapping("/{eventId}")
+    public ResponseEntity<List<TicketResponseDTO>> getTicket(
+            @Valid @PathVariable("eventId") Long eventId) {
+
+      List<TicketResponseDTO>   tickets = eventTicketService.getTicketsByEventId(eventId);
+        return ResponseEntity.ok(tickets);
+    }
+
 }

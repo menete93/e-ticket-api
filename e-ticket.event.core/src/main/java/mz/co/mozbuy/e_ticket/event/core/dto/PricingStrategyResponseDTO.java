@@ -1,6 +1,7 @@
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
 
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.model.PricingStrategy;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -27,7 +28,7 @@ public class PricingStrategyResponseDTO {
     private BigDecimal groupDiscountPercentage;
     private BigDecimal demandThresholdPercentage;
     private BigDecimal priceIncreasePercentage;
-    private Boolean isActive;
+    private LifeCycleState lifeCycleState;
     private Boolean applyAutomatically;
     private LocalDateTime lastAppliedAt;
     private String description;
@@ -53,7 +54,7 @@ public class PricingStrategyResponseDTO {
         dto.setGroupDiscountPercentage(strategy.getGroupDiscountPercentage());
         dto.setDemandThresholdPercentage(strategy.getDemandThresholdPercentage());
         dto.setPriceIncreasePercentage(strategy.getPriceIncreasePercentage());
-        dto.setIsActive(strategy.getIsActive());
+        dto.setLifeCycleState(strategy.getLifeCycleState());
         dto.setApplyAutomatically(strategy.getApplyAutomatically());
         dto.setLastAppliedAt(strategy.getLastAppliedAt());
         dto.setDescription(strategy.getDescription());

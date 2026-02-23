@@ -4,6 +4,7 @@ package mz.co.mozbuy.e_ticket.event.core.service;
 import jakarta.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
@@ -230,7 +231,7 @@ public class TicketService {
         ticket.setOriginalPrice(price);
 
         ticket.setDescription(description);
-        ticket.setIsActive(true);
+        ticket.setLifeCycleState(LifeCycleState.ACTIVE);
 
         // Definir período de vendas para Early Bird
         if (category == TicketCategory.EARLY_BIRD) {
@@ -259,7 +260,7 @@ public class TicketService {
         dto.setSalesStartDate(ticket.getSalesStartDate());
         dto.setSalesEndDate(ticket.getSalesEndDate());
         dto.setMaxTicketsPerUser(ticket.getMaxTicketsPerUser());
-        dto.setIsActive(ticket.getIsActive());
+        dto.setLifeCycleState(ticket.getLifeCycleState());
         dto.setIsAvailable(ticket.isAvailable());
         dto.setIsSalesPeriodActive(ticket.isSalesPeriodActive());
         dto.setTotalRevenue(ticket.getTotalRevenue());

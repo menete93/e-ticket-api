@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
 
 import java.math.BigDecimal;
@@ -31,7 +32,7 @@ public class TicketResponseDTO {
     private LocalDateTime salesEndDate;
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private Integer maxTicketsPerUser;
-    private Boolean isActive;
+    private LifeCycleState lifeCycleState;
     private Boolean isAvailable;
     private Boolean isSalesPeriodActive;
     private BigDecimal totalRevenue;

@@ -14,16 +14,30 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
 
     List<PricingStrategy> findByEventId(Long eventId);
 
-    List<PricingStrategy> findByEventIdAndIsActiveTrue(Long eventId);
+    @Query("SELECT p FROM PricingStrategy p WHERE p.event.id = :eventId AND p.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    List<PricingStrategy> findActiveByEventId(@Param("eventId") Long eventId);
 
-    List<PricingStrategy> findByIsActiveTrue();
+    @Query("SELECT p FROM PricingStrategy p WHERE p.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    List<PricingStrategy> findAllActive();
 
-    List<PricingStrategy> findByIsActiveTrueAndApplyAutomaticallyTrue();
+    @Query("SELECT p FROM PricingStrategy p WHERE p.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND p.applyAutomatically = true")
+    List<PricingStrategy> findActiveAndAutoApplied();
 
-    @Query("SELECT ps FROM PricingStrategy ps WHERE ps.event.id = :eventId AND ps.isActive = true AND ps.applyAutomatically = true")
+    @Query("SELECT ps FROM PricingStrategy ps WHERE ps.event.id = :eventId AND ps.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND ps.applyAutomatically = true")
     List<PricingStrategy> findActiveAutoApplyStrategiesByEventId(@Param("eventId") Long eventId);
 
-    boolean existsByEventIdAndStrategyNameAndIsActiveTrue(Long eventId, String strategyName);
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END " +
+            "FROM PricingStrategy s " +
+            "WHERE s.event.id = :eventId " +
+            "AND s.strategyName = :strategyName " +
+            "AND s.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    boolean existsActiveStrategy(@Param("eventId") Long eventId,
+                                 @Param("strategyName") String strategyName);
 
-    Optional<PricingStrategy> findByEventIdAndStrategyTypeAndIsActiveTrue(Long eventId, String strategyType);
+    @Query("SELECT p FROM PricingStrategy p " +
+            "WHERE p.event.id = :eventId " +
+            "AND p.strategyType = :strategyType " +
+            "AND p.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    Optional<PricingStrategy> findActiveByEventIdAndStrategyType(@Param("eventId") Long eventId,
+                                                                 @Param("strategyType") String strategyType);
 }

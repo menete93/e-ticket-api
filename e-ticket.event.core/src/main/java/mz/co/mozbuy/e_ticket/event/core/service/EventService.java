@@ -5,18 +5,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.*;
-import mz.co.mozbuy.e_ticket.event.core.exceptions.CategoryNotFoundException;
-import mz.co.mozbuy.e_ticket.event.core.exceptions.EventNotFoundException;
+import mz.co.mozbuy.e_ticket.event.core.exceptions.*;
 import mz.co.mozbuy.e_ticket.event.core.mapper.EventMapper;
 import mz.co.mozbuy.e_ticket.event.core.model.Event;
 import mz.co.mozbuy.e_ticket.event.core.model.EventCategory;
+import mz.co.mozbuy.e_ticket.event.core.model.Organizer;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventCategoryRepository;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
-import org.hibernate.Hibernate;
-import org.springframework.beans.factory.annotation.Autowired;
+import mz.co.mozbuy.e_ticket.event.core.repository.OrganizerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,51 +30,120 @@ public class EventService {
     private final EventCategoryRepository eventCategoryRepository;
     private final TicketService eventTicketService;
     private final EventMapper eventMapper; // Usar o mapper
+    private final OrganizerRepository organizerRepository;
 
 
     /**
      * Cria um evento sem tickets
      */
+
+
     @Transactional
     public EventResponseDTO createEvent(EventRequestDTO eventDTO) {
-        // Buscar categoria
+        log.info("Creating event: {} for organizer: {}",
+                eventDTO.getName(), eventDTO.getUserId());
+
+        // 1. Buscar organizador
+        Organizer organizer = organizerRepository.findByUserId(eventDTO.getUserId())
+                .orElseThrow(() -> new OrganizerNotFoundException(eventDTO.getUserId()));
+
+        // 2. Buscar categoria
         EventCategory category = eventCategoryRepository.findById(eventDTO.getCategoryId())
                 .orElseThrow(() -> new CategoryNotFoundException(eventDTO.getCategoryId()));
 
-        // Criar evento
-        Event event = new Event();
-        event.setName(eventDTO.getName());
-        event.setDescription(eventDTO.getDescription());
-        event.setGeographicLocation(eventDTO.getGeographicLocation());
-        event.setCategory(category);
-        event.setEventDate(eventDTO.getEventDate());
-        event.setStartTime(eventDTO.getStartTime());
-        event.setEndTime(eventDTO.getEndTime());
-        event.setCoverImageUrl(eventDTO.getCoverImageUrl());
-        event.setBannerImageUrl(eventDTO.getBannerImageUrl());
-        event.setMaxAttendees(eventDTO.getMaxAttendees());
-        event.setMinAttendees(eventDTO.getMinAttendees());
-        event.setIsPublic(eventDTO.getIsPublic());
-        event.setIsFeatured(eventDTO.getIsFeatured());
-        event.setIsFree(eventDTO.getIsFree());
-        event.setRegistrationDeadline(eventDTO.getRegistrationDeadline());
+        // 3. Validar se organizador pode criar eventos
+        if (!organizer.canCreateEvents()) {
+            throw new OrganizerNotAllowedException(
+                    "Organizer %s cannot create events. Status: %s",
+                            organizer.getName(),"status"+ organizer.getLifeCycleState().getDbValue());
 
-
-        Event savedEvent = eventRepository.save(event);
-        log.info("Event created: {} by {}", savedEvent.getName());
-
-        // Criar tickets padrão se solicitado
-        if (Boolean.TRUE.equals(eventDTO.getCreateDefaultTickets()) && eventDTO.getMaxAttendees() != null) {
-            eventTicketService.createDefaultTickets(savedEvent, eventDTO.getMaxAttendees());
-            // Recarregar o evento para incluir os tickets criados
-            savedEvent = eventRepository.findById(savedEvent.getId())
-                    .orElseThrow(() -> new RuntimeException("Event not found after creation"));
-            log.info("Default tickets created for event: {}", savedEvent.getName());
         }
+
+        // 4. Criar evento usando um método auxiliar (ou builder)
+        Event event = createEventEntity(eventDTO, organizer, category);
+
+        // 5. Verificar e aplicar trial se elegível
+        applyTrialIfEligible(event, organizer, eventDTO);
+
+        // 6. Salvar evento
+        Event savedEvent = eventRepository.save(event);
+
+        // 7. Criar tickets padrão se solicitado
+        if (Boolean.TRUE.equals(eventDTO.getCreateDefaultTickets())) {
+            createDefaultTicketsIfNeeded(savedEvent, eventDTO);
+
+            final Long eventId = savedEvent.getId();
+
+            savedEvent = eventRepository.findByIdWithTickets(eventId)
+                    .orElseThrow(() -> new EventNotFoundException(eventId));
+        }
+
+
+        // 8. Atualizar contador de eventos do organizador
+        organizer.incrementEventsCreated();
+        organizerRepository.save(organizer);
+
+        log.info("Event created successfully: {} (ID: {}) by organizer: {}",
+                savedEvent.getName(), savedEvent.getId(), organizer.getName());
 
         return eventMapper.toDTO(savedEvent);
     }
 
+    private Event createEventEntity(EventRequestDTO dto, Organizer organizer, EventCategory category) {
+        Event event = new Event();
+        event.setName(dto.getName());
+        event.setOrganizer(organizer);
+        event.setCategory(category);
+        event.setDescription(dto.getDescription());
+        event.setGeographicLocation(dto.getGeographicLocation());
+        event.setEventDate(dto.getEventDate());
+        event.setStartTime(dto.getStartTime());
+        event.setEndTime(dto.getEndTime());
+        event.setCoverImageUrl(dto.getCoverImageUrl());
+        event.setBannerImageUrl(dto.getBannerImageUrl());
+        event.setMaxAttendees(dto.getMaxAttendees());
+        event.setMinAttendees(dto.getMinAttendees());
+        event.setIsPublic(dto.getIsPublic());
+        event.setIsFeatured(dto.getIsFeatured());
+        event.setIsFree(dto.getIsFree());
+        event.setRegistrationDeadline(dto.getRegistrationDeadline());
+
+        // Configuração de pricing específica do evento (se fornecida)
+        if (dto.getEventCommissionRate() != null) {
+            event.setEventCommissionRate(dto.getEventCommissionRate());
+        }
+        if (dto.getEventFlatFee() != null) {
+            event.setEventFlatFee(dto.getEventFlatFee());
+        }
+
+        return event;
+    }
+
+    private void applyTrialIfEligible(Event event, Organizer organizer, EventRequestDTO dto) {
+        // Se organizador tem trial disponível E evento é marcado como trial
+        if (organizer.isEventEligibleForTrial() &&
+                Boolean.TRUE.equals(dto.getIsTrialEvent())) {
+            event.setIsTrialEvent(true);
+            log.debug("Event marked as trial. Trials remaining: {}",
+                    organizer.getTrialEventsRemaining());
+        }
+    }
+
+    private void createDefaultTicketsIfNeeded(Event event, EventRequestDTO dto) {
+        if (dto.getMaxAttendees() == null || dto.getMaxAttendees() <= 0) {
+            throw new IllegalArgumentException(
+                    "maxAttendees must be provided and greater than 0 for default tickets");
+        }
+
+        try {
+            eventTicketService.createDefaultTickets(event, dto.getMaxAttendees());
+            log.info("Default tickets created for event: {} ({} tickets)",
+                    event.getName(), dto.getMaxAttendees());
+        } catch (Exception e) {
+            log.error("Failed to create default tickets for event: {}", event.getId(), e);
+            throw new TicketCreationException("Failed to create default tickets", e);
+        }
+    }
     /**
      * Busca evento por ID
      */
@@ -93,10 +160,10 @@ public class EventService {
     @Transactional
     public EventResponseDTO updateEvent(Long eventId, EventRequestDTO eventDTO) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new RuntimeException("Event not found with id: " + eventId));
+                .orElseThrow(() -> new EventNotFoundException(eventId));
 
         EventCategory category = eventCategoryRepository.findById(eventDTO.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("Category not found with id: " + eventDTO.getCategoryId()));
+                .orElseThrow(() -> new EventCategoryNotFoundException( eventDTO.getCategoryId()));
 
         // Atualizar campos
         event.setDescription(eventDTO.getDescription());
@@ -231,6 +298,10 @@ public class EventService {
             Event primeiro = events.get(0);
             System.out.println("Primeiro evento: " + primeiro.getName());
             System.out.println("Tickets carregados: " + primeiro.getTickets().size());
+        }
+
+        if (events.isEmpty()) {
+            throw new EventNotFoundException();
         }
 
         // Converta para DTO

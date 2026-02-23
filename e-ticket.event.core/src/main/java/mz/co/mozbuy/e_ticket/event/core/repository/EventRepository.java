@@ -105,8 +105,16 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
         BigDecimal getTicketPrice();
     }
 
-//    // ✅ CORRETO - Retorna List<Event>
-//    @Query("SELECT DISTINCT e FROM Event e LEFT JOIN FETCH e.tickets WHERE e.lifeCycleState = 'ACTIVE'")
-//    List<Event> findActiveEventsWithTickets();
+    @Query("SELECT e FROM Event e " +
+            "LEFT JOIN FETCH e.tickets " +
+            "LEFT JOIN FETCH e.organizer " +
+            "LEFT JOIN FETCH e.category " +
+            "WHERE e.id = :id")
+    Optional<Event> findByIdWithTickets(@Param("id") Long id);
+
+    @Query("SELECT e FROM Event e " +
+            "LEFT JOIN FETCH e.tickets " +
+            "WHERE e.lifeCycleState = :state")
+    List<Event> findByStateWithTickets(@Param("state") LifeCycleState state);
 
 }

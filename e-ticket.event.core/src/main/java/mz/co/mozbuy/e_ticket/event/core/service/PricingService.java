@@ -3,6 +3,7 @@ package mz.co.mozbuy.e_ticket.event.core.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.ScheduledPriceChangeRequestDTO;
@@ -35,7 +36,7 @@ public class PricingService {
                 .orElseThrow(() -> new RuntimeException("Event not found with id: " + requestDTO.getEventId()));
 
         // Verificar se já existe estratégia com mesmo nome
-        if (pricingStrategyRepository.existsByEventIdAndStrategyNameAndIsActiveTrue(
+        if (pricingStrategyRepository.existsActiveStrategy(
                 requestDTO.getEventId(), requestDTO.getStrategyName())) {
             throw new RuntimeException("Pricing strategy with name '" + requestDTO.getStrategyName() + "' already exists for this event");
         }
@@ -52,7 +53,7 @@ public class PricingService {
         strategy.setTimeBasedIncreasePercentage(requestDTO.getTimeBasedIncreasePercentage());
         strategy.setGroupSizeThreshold(requestDTO.getGroupSizeThreshold());
         strategy.setGroupDiscountPercentage(requestDTO.getGroupDiscountPercentage());
-        strategy.setIsActive(requestDTO.getIsActive());
+        strategy.setLifeCycleState(requestDTO.getLifeCycleState());
         strategy.setApplyAutomatically(requestDTO.getApplyAutomatically());
 
         PricingStrategy savedStrategy = pricingStrategyRepository.save(strategy);
@@ -93,14 +94,14 @@ public class PricingService {
         PricingStrategy strategy = pricingStrategyRepository.findById(strategyId)
                 .orElseThrow(() -> new RuntimeException("Pricing strategy not found with id: " + strategyId));
 
-        if (!strategy.getIsActive()) {
+        if (strategy.getLifeCycleState().equals(LifeCycleState.INACTIVE)) {
             throw new RuntimeException("Pricing strategy is not active");
         }
 
         List<EventTicket> tickets = eventTicketRepository.findByEventId(strategy.getEvent().getId());
 
         for (EventTicket ticket : tickets) {
-            if (ticket.getIsActive() && ticket.isSalesPeriodActive()) {
+            if (ticket.getLifeCycleState().equals(LifeCycleState.ACTIVE) && ticket.isSalesPeriodActive()) {
                 BigDecimal newPrice = calculatePriceWithStrategy(ticket, strategy);
 
                 // Aplicar limites
@@ -156,7 +157,7 @@ public class PricingService {
         dto.setTimeBasedIncreasePercentage(strategy.getTimeBasedIncreasePercentage());
         dto.setGroupSizeThreshold(strategy.getGroupSizeThreshold());
         dto.setGroupDiscountPercentage(strategy.getGroupDiscountPercentage());
-        dto.setIsActive(strategy.getIsActive());
+        dto.setLifeCycleState(strategy.getLifeCycleState());
         dto.setApplyAutomatically(strategy.getApplyAutomatically());
         dto.setLastAppliedAt(strategy.getLastAppliedAt());
         dto.setCreatedAt(strategy.getCreatedAt());

@@ -1,20 +1,25 @@
 // EventRequestDTO.java
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.locationtech.jts.geom.Point;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class EventRequestDTO {
+
+
+    @NotNull(message = "User id is required")
+    private Long userId;
+
+    private BigDecimal eventCommissionRate;
 
     @NotBlank(message = "Event name is required")
     @Size(min = 3, max = 200, message = "Name must be between 3 and 200 characters")
@@ -33,6 +38,13 @@ public class EventRequestDTO {
     @NotNull(message = "Event date is required")
     private LocalDateTime eventDate;
 
+    @DecimalMin("0.0")
+    private BigDecimal eventFlatFee;
+
+    private Boolean isTrialEvent = false;
+
+    private Boolean createDefaultTickets = false;
+
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private String coverImageUrl;
@@ -45,5 +57,13 @@ public class EventRequestDTO {
     private LocalDateTime registrationDeadline;
 
     // Flag para criar tickets padrão automaticamente
-    private Boolean createDefaultTickets = false;
+
+    // Validação customizada
+    @AssertTrue(message = "maxAttendees must be greater than minAttendees")
+    public boolean isValidAttendees() {
+        if (maxAttendees == null || minAttendees == null) {
+            return true; // Permite nulo
+        }
+        return maxAttendees >= minAttendees;
+    }
 }

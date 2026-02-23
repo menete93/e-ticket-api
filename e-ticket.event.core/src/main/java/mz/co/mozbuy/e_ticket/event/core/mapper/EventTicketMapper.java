@@ -27,7 +27,7 @@ public class EventTicketMapper {
         dto.setSalesStartDate(ticket.getSalesStartDate());
         dto.setSalesEndDate(ticket.getSalesEndDate());
         dto.setMaxTicketsPerUser(ticket.getMaxTicketsPerUser());
-        dto.setIsActive(ticket.getIsActive());
+        dto.setLifeCycleState(ticket.getLifeCycleState());
         dto.setIsAvailable(ticket.isAvailable());
         dto.setIsSalesPeriodActive(ticket.isSalesPeriodActive());
         dto.setTotalRevenue(ticket.getTotalRevenue());

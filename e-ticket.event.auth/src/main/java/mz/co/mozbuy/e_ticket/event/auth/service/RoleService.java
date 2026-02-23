@@ -167,7 +167,7 @@ public class RoleService {
             throw new RuntimeException("Some permissions not found: " + missingIds);
         }
 
-        role.setPermissions(permissions);
+        role.setPermissions(new HashSet<>(permissions));
         Role updatedRole = roleRepository.save(role);
         log.info("Permissions updated for role '{}'. Total permissions: {}", role.getName(), permissions.size());
 
@@ -293,7 +293,7 @@ public class RoleService {
             Role userRole = Role.builder()
                     .name("USER")
                     .description("Default user role")
-                    .permissions(List.of(userRead))
+                    .permissions(new HashSet<>(List.of(userRead)))
                     .build();
 
             // Criar role ADMIN
@@ -302,7 +302,7 @@ public class RoleService {
             Role adminRole = Role.builder()
                     .name("ADMIN")
                     .description("Administrator role with full access")
-                    .permissions(adminPermissions)
+                    .permissions(new HashSet<>(adminPermissions))
                     .build();
 
             // Criar role MODERATOR (exemplo)
@@ -313,7 +313,7 @@ public class RoleService {
             Role moderatorRole = Role.builder()
                     .name("MODERATOR")
                     .description("Moderator role with user management capabilities")
-                    .permissions(Arrays.asList(userReadPerm, userWritePerm, sessionManagePerm))
+                    .permissions(new HashSet<>(Arrays.asList(userReadPerm, userWritePerm, sessionManagePerm)))
                     .build();
 
             roleRepository.saveAll(Arrays.asList(userRole, adminRole, moderatorRole));
