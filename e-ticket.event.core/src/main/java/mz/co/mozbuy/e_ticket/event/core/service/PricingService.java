@@ -17,7 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -181,4 +184,12 @@ public class PricingService {
         dto.setCreatedAt(change.getCreatedAt());
         return dto;
     }
+
+
+    public List<PricingStrategyResponseDTO> findAll(){
+
+        return pricingStrategyRepository.findAllActive().stream().
+                map(this::toPricingStrategyDTO).collect(Collectors.toList());    }
+
+
 }

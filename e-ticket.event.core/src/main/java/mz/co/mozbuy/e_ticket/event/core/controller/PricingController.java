@@ -4,10 +4,7 @@ package mz.co.mozbuy.e_ticket.event.core.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyRequestDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyResponseDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.ScheduledPriceChangeRequestDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.ScheduledPriceChangeResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.*;
 import mz.co.mozbuy.e_ticket.event.core.enums.PricingStrategyType;
 import mz.co.mozbuy.e_ticket.event.core.service.PricingService;
 import org.springframework.http.HttpStatus;
@@ -51,9 +48,10 @@ public class PricingController {
     }
 
     @GetMapping
-    public List<String> getAll() {
-        return Arrays.stream(PricingStrategyType.values())
-                .map(PricingStrategyType::getValue)
-                .toList();
+    public  ResponseEntity<List<PricingStrategyResponseDTO>>  findAllStrategy() {
+       List <PricingStrategyResponseDTO> strategy = pricingService.findAll();
+        return ResponseEntity.ok(strategy);
     }
+
+
 }
