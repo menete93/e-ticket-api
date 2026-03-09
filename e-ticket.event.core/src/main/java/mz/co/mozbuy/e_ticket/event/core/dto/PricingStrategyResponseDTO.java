@@ -1,67 +1,69 @@
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
-
-import mz.co.mozbuy.common.audit.LifeCycleState;
-import mz.co.mozbuy.e_ticket.event.core.model.PricingStrategy;
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-
+import lombok.Builder;
+import mz.co.mozbuy.e_ticket.event.core.enums.PricingStrategyType;
+import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
+@Builder
 public class PricingStrategyResponseDTO {
     private Long id;
-    private String strategyName;
-    private String strategyType;
+    private String name;
+    private PricingStrategyType strategyType;
     private Long eventId;
-    private BigDecimal basePrice;
+    private String eventName;
+    private TicketCategory specificCategory;
+
+    // Configurações temporais
+    private Integer daysBeforeEventStart;
+    private Integer daysBeforeEventEnd;
+    private LocalDateTime customStartDate;
+    private LocalDateTime customEndDate;
+
+    // Configurações de demanda
+    private Integer salesThreshold;
+    private Integer availableTicketsThreshold;
+
+    // Ajustes de preço
+    private BigDecimal percentageAdjustment;
+    private BigDecimal fixedAdjustment;
+    private BigDecimal multiplier;
+
+    // Limites
     private BigDecimal minPrice;
     private BigDecimal maxPrice;
-    private BigDecimal demandMultiplier;
-    private Integer timeBasedIncreaseDays;
-    private BigDecimal timeBasedIncreasePercentage;
-    private Integer groupSizeThreshold;
+
+    // Regras de grupo
+    private Integer minGroupSize;
     private BigDecimal groupDiscountPercentage;
-    private BigDecimal demandThresholdPercentage;
-    private BigDecimal priceIncreasePercentage;
-    private LifeCycleState lifeCycleState;
-    private Boolean applyAutomatically;
-    private LocalDateTime lastAppliedAt;
+
+    // 🆕 NOVOS CAMPOS DE FIDELIDADE
+    private String loyaltyTier;
+    private Integer minPurchases;
+    private BigDecimal minTotalSpent;
+    private boolean firstTimeBuyerOnly;
+    private boolean repeatBuyerOnly;
+    private boolean exclusiveToTier;
     private String description;
+
+    // Status e métricas
+    private Integer priority;
+    private boolean active;
+    private boolean autoApply;
+    private LocalDateTime lastAppliedAt;
+    private Integer timesApplied;
+    private BigDecimal totalDiscountGiven;
+    private BigDecimal totalRevenueGenerated;
+
+    // Auditoria
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String createdBy;
-    private String updatedBy;
 
-    // Método factory estático
-    public static PricingStrategyResponseDTO fromEntity(PricingStrategy strategy) {
-        PricingStrategyResponseDTO dto = new PricingStrategyResponseDTO();
-        dto.setId(strategy.getId());
-        dto.setStrategyName(strategy.getStrategyName());
-        dto.setStrategyType(strategy.getStrategyType());
-        dto.setEventId(strategy.getEvent().getId());
-        dto.setBasePrice(strategy.getBasePrice());
-        dto.setMinPrice(strategy.getMinPrice());
-        dto.setMaxPrice(strategy.getMaxPrice());
-        dto.setDemandMultiplier(strategy.getDemandMultiplier());
-        dto.setTimeBasedIncreaseDays(strategy.getTimeBasedIncreaseDays());
-        dto.setTimeBasedIncreasePercentage(strategy.getTimeBasedIncreasePercentage());
-        dto.setGroupSizeThreshold(strategy.getGroupSizeThreshold());
-        dto.setGroupDiscountPercentage(strategy.getGroupDiscountPercentage());
-        dto.setDemandThresholdPercentage(strategy.getDemandThresholdPercentage());
-        dto.setPriceIncreasePercentage(strategy.getPriceIncreasePercentage());
-        dto.setLifeCycleState(strategy.getLifeCycleState());
-        dto.setApplyAutomatically(strategy.getApplyAutomatically());
-        dto.setLastAppliedAt(strategy.getLastAppliedAt());
-        dto.setDescription(strategy.getDescription());
-        dto.setCreatedAt(strategy.getCreatedAt());
-        dto.setUpdatedAt(strategy.getUpdatedAt());
-        dto.setCreatedBy(strategy.getCreatedBy());
-        dto.setUpdatedBy(strategy.getUpdatedBy());
-        return dto;
-    }
+    // Métricas calculadas
+    private boolean currentlyApplicable;
+    private Long affectedTicketsCount;
 }

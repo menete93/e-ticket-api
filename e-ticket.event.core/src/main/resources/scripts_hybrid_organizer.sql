@@ -243,7 +243,7 @@ CREATE TABLE pricing_strategies (
                                     price_increase_percentage DECIMAL(5,2),
 
     -- Controles
-                                    apply_automatically BOOLEAN NOT NULL DEFAULT FALSE,
+                                    auto_apply BOOLEAN NOT NULL DEFAULT FALSE,
                                     last_applied_at TIMESTAMP NULL,
                                     description VARCHAR(500),
 
@@ -265,6 +265,16 @@ CREATE TABLE pricing_strategies (
                                     INDEX idx_pricing_strategy_auto (apply_automatically),
                                     INDEX idx_pricing_strategy_state (life_cycle_state)
 );
+
+
+CREATE TABLE strategy_bundle_tickets (
+                                         strategy_id BIGINT NOT NULL,
+                                         ticket_id BIGINT NOT NULL,
+                                         PRIMARY KEY (strategy_id, ticket_id),
+                                         FOREIGN KEY (strategy_id) REFERENCES pricing_strategies(id),
+                                         FOREIGN KEY (ticket_id) REFERENCES event_tickets(id)
+);
+
 
 -- Tabela de Bilhetes do Evento
 CREATE TABLE event_tickets (
@@ -385,7 +395,7 @@ CREATE TABLE ticket_price_history (
                                       old_price DECIMAL(15,2),
                                       new_price DECIMAL(15,2),
                                       change_reason VARCHAR(500),
-                                      change_type VARCHAR(50),
+                                      strategyId BIGINT,
     -- Auditoria
                                       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                       created_by VARCHAR(100) NOT NULL,

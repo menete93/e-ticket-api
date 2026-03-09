@@ -1,21 +1,20 @@
 package mz.co.mozbuy.e_ticket.event.core.service;
 
-
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
-import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyRequestDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.PricingStrategyResponseDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.ScheduledPriceChangeRequestDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.ScheduledPriceChangeResponseDTO;
-import mz.co.mozbuy.e_ticket.event.core.model.Event;
-import mz.co.mozbuy.e_ticket.event.core.model.EventTicket;
-import mz.co.mozbuy.e_ticket.event.core.model.PricingStrategy;
-import mz.co.mozbuy.e_ticket.event.core.model.ScheduledPriceChange;
+import mz.co.mozbuy.e_ticket.event.core.dto.*;
+import mz.co.mozbuy.e_ticket.event.core.enums.PriceAdjustmentType;
+import mz.co.mozbuy.e_ticket.event.core.enums.PricingStrategyType;
+import mz.co.mozbuy.e_ticket.event.core.model.*;
 import mz.co.mozbuy.e_ticket.event.core.repository.*;
+import mz.co.mozbuy.e_ticket.event.core.service.pricing.PricingHistoryService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,54 +25,152 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PricingService {
 
+    // Repositórios
     private final PricingStrategyRepository pricingStrategyRepository;
     private final EventTicketRepository eventTicketRepository;
     private final ScheduledPriceChangeRepository scheduledPriceChangeRepository;
-    private final PriceAdjustmentRuleRepository priceAdjustmentRuleRepository;
     private final TicketPriceHistoryRepository ticketPriceHistoryRepository;
     private final EventRepository eventRepository;
 
+    // Adicione este método no PricingService para acessar o PricingStrategyService
+    // Services (delegar responsabilidades)
+    @Getter
+    private final PricingStrategyService pricingStrategyService;
+    private final DynamicPricingService dynamicPricingService;
+    private final PricingHistoryService pricingHistoryService;
+    private final LoyaltyService loyaltyService;
+
+    // ==================== ESTRATÉGIAS DE PRECIFICAÇÃO ====================
+
+    /**
+     * Criar nova estratégia de precificação
+     */
     @Transactional
     public PricingStrategyResponseDTO createPricingStrategy(PricingStrategyRequestDTO requestDTO) {
+        // Validações básicas
         Event event = eventRepository.findById(requestDTO.getEventId())
                 .orElseThrow(() -> new RuntimeException("Event not found with id: " + requestDTO.getEventId()));
 
         // Verificar se já existe estratégia com mesmo nome
-        if (pricingStrategyRepository.existsActiveStrategy(
-                requestDTO.getEventId(), requestDTO.getStrategyName())) {
-            throw new RuntimeException("Pricing strategy with name '" + requestDTO.getStrategyName() + "' already exists for this event");
+        if (pricingStrategyRepository.existsByEventIdAndStrategyNameIgnoreCase(
+                requestDTO.getEventId(), requestDTO.getName())) {
+            throw new RuntimeException("Pricing strategy with name '" + requestDTO.getName() + "' already exists for this event");
         }
 
-        PricingStrategy strategy = new PricingStrategy();
-        strategy.setStrategyName(requestDTO.getStrategyName());
-        strategy.setStrategyType(requestDTO.getStrategyType());
-        strategy.setEvent(event);
-        strategy.setBasePrice(requestDTO.getBasePrice());
-        strategy.setMinPrice(requestDTO.getMinPrice());
-        strategy.setMaxPrice(requestDTO.getMaxPrice());
-        strategy.setDemandMultiplier(requestDTO.getDemandMultiplier());
-        strategy.setTimeBasedIncreaseDays(requestDTO.getTimeBasedIncreaseDays());
-        strategy.setTimeBasedIncreasePercentage(requestDTO.getTimeBasedIncreasePercentage());
-        strategy.setGroupSizeThreshold(requestDTO.getGroupSizeThreshold());
-        strategy.setGroupDiscountPercentage(requestDTO.getGroupDiscountPercentage());
-        strategy.setLifeCycleState(requestDTO.getLifeCycleState());
-        strategy.setApplyAutomatically(requestDTO.getApplyAutomatically());
+        // Validação de limites
+        if (requestDTO.getMinPrice() != null && requestDTO.getMaxPrice() != null
+                && requestDTO.getMinPrice().compareTo(requestDTO.getMaxPrice()) > 0) {
+            throw new RuntimeException("Minimum price cannot be greater than maximum price");
+        }
 
-        PricingStrategy savedStrategy = pricingStrategyRepository.save(strategy);
-        log.info("Created pricing strategy: {} for event: {}", savedStrategy.getStrategyName(), event.getId());
+        // Validar a estratégia
+        if (!requestDTO.isValid()) {
+            throw new RuntimeException("Invalid strategy configuration");
+        }
 
-        return toPricingStrategyDTO(savedStrategy);
+        // Delegar para o PricingStrategyService
+        return pricingStrategyService.createStrategy(requestDTO);
     }
 
+    /**
+     * Atualizar estratégia existente
+     */
+    @Transactional
+    public PricingStrategyResponseDTO updatePricingStrategy(Long id, PricingStrategyRequestDTO requestDTO) {
+        return pricingStrategyService.updateStrategy(id, requestDTO);
+    }
+
+    /**
+     * Deletar/desativar estratégia
+     */
+    @Transactional
+    public void deletePricingStrategy(Long id) {
+        pricingStrategyService.deleteStrategy(id);
+    }
+
+    /**
+     * Buscar estratégia por ID
+     */
+    @Transactional(readOnly = true)
+    public PricingStrategyResponseDTO getPricingStrategy(Long id) {
+        return pricingStrategyService.getStrategy(id);
+    }
+
+    /**
+     * Listar todas estratégias ativas de um evento
+     */
+    @Transactional(readOnly = true)
+    public List<PricingStrategyResponseDTO> getStrategiesByEvent(Long eventId) {
+        return pricingStrategyService.getStrategiesByEvent(eventId);
+    }
+
+    /**
+     * Listar todas estratégias (admin)
+     */
+    @Transactional(readOnly = true)
+    public List<PricingStrategyResponseDTO> findAllStrategies() {
+        return pricingStrategyRepository.findAll().stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    // ==================== APLICAÇÃO DE ESTRATÉGIAS ====================
+
+    /**
+     * Aplicar estratégia manualmente
+     */
+    @Transactional
+    public StrategyApplicationResultDTO applyStrategyManually(Long strategyId) {
+        return pricingStrategyService.applyStrategyManually(strategyId);
+    }
+
+    /**
+     * Aplicar estratégia a um ticket específico (com userId para fidelidade)
+     */
+    @Transactional
+    public BigDecimal applyStrategyToTicket(Long strategyId, Long ticketId, Long userId) {
+        PricingStrategy strategy = pricingStrategyRepository.findById(strategyId)
+                .orElseThrow(() -> new RuntimeException("Strategy not found"));
+
+        EventTicket ticket = eventTicketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+
+        BigDecimal newPrice = dynamicPricingService.calculatePrice(ticket, strategy, userId);
+
+        if (!newPrice.equals(ticket.getCurrentPrice())) {
+            ticket.updatePrice(newPrice,
+                    "Applied strategy: " + strategy.getStrategyName(),
+                    strategy.getStrategyType().name(),
+                    strategyId);
+            eventTicketRepository.save(ticket);
+        }
+
+        return newPrice;
+    }
+
+    /**
+     * Aplicar estratégias automáticas a um evento
+     */
+    @Transactional
+    public List<StrategyApplicationResultDTO> applyAutoStrategiesToEvent(Long eventId) {
+        return pricingStrategyService.applyAutoStrategiesToEvent(eventId);
+    }
+
+
+    // ==================== MUDANÇAS PROGRAMADAS ====================
+
+    /**
+     * Agendar mudança de preço
+     */
     @Transactional
     public ScheduledPriceChangeResponseDTO schedulePriceChange(ScheduledPriceChangeRequestDTO requestDTO) {
         PricingStrategy pricingStrategy = pricingStrategyRepository.findById(requestDTO.getPricingStrategyId())
-                .orElseThrow(() -> new RuntimeException("Pricing strategy not found with id: " + requestDTO.getPricingStrategyId()));
+                .orElseThrow(() -> new RuntimeException("Pricing strategy not found"));
 
         EventTicket eventTicket = null;
         if (requestDTO.getEventTicketId() != null) {
             eventTicket = eventTicketRepository.findById(requestDTO.getEventTicketId())
-                    .orElseThrow(() -> new RuntimeException("Event ticket not found with id: " + requestDTO.getEventTicketId()));
+                    .orElseThrow(() -> new RuntimeException("Event ticket not found"));
         }
 
         ScheduledPriceChange scheduledChange = new ScheduledPriceChange();
@@ -84,112 +181,183 @@ public class PricingService {
         scheduledChange.setNewPrice(requestDTO.getNewPrice());
         scheduledChange.setScheduledAt(requestDTO.getScheduledAt());
         scheduledChange.setApplyToAllTickets(requestDTO.getApplyToAllTickets());
+        scheduledChange.setIsExecuted(false);
 
         ScheduledPriceChange savedChange = scheduledPriceChangeRepository.save(scheduledChange);
         log.info("Scheduled price change for strategy: {} at {}",
                 pricingStrategy.getStrategyName(), requestDTO.getScheduledAt());
 
-        return toScheduledPriceChangeDTO(savedChange);
+        return convertToScheduledChangeDTO(savedChange);
     }
 
-    @Transactional
-    public void applyPricingStrategy(Long strategyId) {
-        PricingStrategy strategy = pricingStrategyRepository.findById(strategyId)
-                .orElseThrow(() -> new RuntimeException("Pricing strategy not found with id: " + strategyId));
+    /**
+     * Listar mudanças programadas de um evento
+     */
+    @Transactional(readOnly = true)
+    public List<ScheduledPriceChangeResponseDTO> getScheduledChangesByEvent(Long eventId) {
+        return scheduledPriceChangeRepository.findByEventId(eventId).stream()
+                .map(this::convertToScheduledChangeDTO)
+                .collect(Collectors.toList());
+    }
 
-        if (strategy.getLifeCycleState().equals(LifeCycleState.INACTIVE)) {
-            throw new RuntimeException("Pricing strategy is not active");
+    /**
+     * Cancelar mudança programada
+     */
+    @Transactional
+    public void cancelScheduledChange(Long changeId) {
+        ScheduledPriceChange change = scheduledPriceChangeRepository.findById(changeId)
+                .orElseThrow(() -> new RuntimeException("Scheduled change not found"));
+
+        if (change.getIsExecuted()) {
+            throw new RuntimeException("Cannot cancel an already executed change");
         }
 
-        List<EventTicket> tickets = eventTicketRepository.findByEventId(strategy.getEvent().getId());
+        scheduledPriceChangeRepository.delete(change);
+        log.info("Cancelled scheduled change: {}", changeId);
+    }
+
+    // ==================== HISTÓRICO DE PREÇOS ====================
+
+    /**
+     * Buscar histórico de um ticket
+     */
+    @Transactional(readOnly = true)
+    public List<TicketPriceHistoryDTO> getPriceHistoryByTicket(Long ticketId) {
+        return pricingHistoryService.getHistoryByTicket(ticketId);
+    }
+
+    /**
+     * Buscar histórico de um evento
+     */
+    @Transactional(readOnly = true)
+    public List<TicketPriceHistoryDTO> getPriceHistoryByEvent(Long eventId) {
+        return pricingHistoryService.getHistoryByEvent(eventId);
+    }
+
+    /**
+     * Buscar histórico de uma estratégia
+     */
+    @Transactional(readOnly = true)
+    public List<TicketPriceHistoryDTO> getPriceHistoryByStrategy(Long strategyId) {
+        return pricingHistoryService.getHistoryByStrategy(strategyId);
+    }
+
+    // ==================== PREVISÕES E RELATÓRIOS ====================
+
+    /**
+     * Previsão de receita
+     */
+    public RevenuePredictionDTO predictRevenue(Long eventId) {
+        List<EventTicket> tickets = eventTicketRepository.findByEventId(eventId);
+
+        if (tickets.isEmpty()) {
+            return RevenuePredictionDTO.builder()
+                    .totalExpected(BigDecimal.ZERO)
+                    .totalSold(BigDecimal.ZERO)
+                    .totalRemaining(BigDecimal.ZERO)
+                    .ticketCount(0)
+                    .build();
+        }
+
+        BigDecimal totalExpected = BigDecimal.ZERO;
+        BigDecimal totalSold = BigDecimal.ZERO;
+        BigDecimal totalRemaining = BigDecimal.ZERO;
 
         for (EventTicket ticket : tickets) {
-            if (ticket.getLifeCycleState().equals(LifeCycleState.ACTIVE) && ticket.isSalesPeriodActive()) {
-                BigDecimal newPrice = calculatePriceWithStrategy(ticket, strategy);
+            int sold = ticket.getSoldQuantity() != null ? ticket.getSoldQuantity() : 0;
+            int capacity = ticket.getTotalQuantity() != null ? ticket.getTotalQuantity() : 0;
+            int remaining = capacity - sold;
 
-                // Aplicar limites
-                if (strategy.getMinPrice() != null && newPrice.compareTo(strategy.getMinPrice()) < 0) {
-                    newPrice = strategy.getMinPrice();
-                }
-                if (strategy.getMaxPrice() != null && newPrice.compareTo(strategy.getMaxPrice()) > 0) {
-                    newPrice = strategy.getMaxPrice();
-                }
+            BigDecimal currentPrice = ticket.getCurrentPrice() != null ?
+                    ticket.getCurrentPrice() : BigDecimal.ZERO;
 
-                // Atualizar se diferente
-                if (!newPrice.equals(ticket.getCurrentPrice())) {
-                    ticket.updatePrice(newPrice, "Manual strategy application: " + strategy.getStrategyName());
-                    eventTicketRepository.save(ticket);
-                }
-            }
+            // Projeção de receita total
+            BigDecimal projected = currentPrice.multiply(BigDecimal.valueOf(capacity));
+            totalExpected = totalExpected.add(projected);
+
+            // Receita já realizada
+            BigDecimal soldRevenue = currentPrice.multiply(BigDecimal.valueOf(sold));
+            totalSold = totalSold.add(soldRevenue);
+
+            // Receita potencial restante
+            BigDecimal remainingRevenue = currentPrice.multiply(BigDecimal.valueOf(remaining));
+            totalRemaining = totalRemaining.add(remainingRevenue);
         }
 
-        strategy.setLastAppliedAt(LocalDateTime.now());
-        pricingStrategyRepository.save(strategy);
-
-        log.info("Applied pricing strategy: {} to event: {}", strategy.getStrategyName(), strategy.getEvent().getId());
+        return RevenuePredictionDTO.builder()
+                .totalExpected(totalExpected)
+                .totalSold(totalSold)
+                .totalRemaining(totalRemaining)
+                .ticketCount(tickets.size())
+                .build();
     }
 
-    @Transactional
-    public void applyDynamicPricingToEvent(Long eventId) {
-        List<PricingStrategy> strategies = pricingStrategyRepository.findActiveAutoApplyStrategiesByEventId(eventId);
-
-        for (PricingStrategy strategy : strategies) {
-            applyPricingStrategy(strategy.getId());
-        }
-
-        log.info("Applied dynamic pricing to event: {}", eventId);
+    /**
+     * Prever preço futuro de um ticket
+     */
+    public BigDecimal predictFuturePrice(Long ticketId, Long userId, LocalDateTime futureDate) {
+        return dynamicPricingService.predictFuturePrice(ticketId, userId, futureDate);
     }
 
-    private BigDecimal calculatePriceWithStrategy(EventTicket ticket, PricingStrategy strategy) {
-        // Implementar lógica de cálculo baseada no tipo de estratégia
-        // Similar à implementação no DynamicPricingService
-        return ticket.getCurrentPrice(); // Placeholder
+    /**
+     * Relatório de estratégias mais eficazes
+     */
+    public List<PricingStrategyEffectivenessDTO> getStrategyEffectivenessReport(Long eventId) {
+        List<PricingStrategy> strategies = pricingStrategyRepository.findByEventIdAndLifeCycleStateAfterOrderByPriorityDesc(eventId,LifeCycleState.ACTIVE);
+
+        return strategies.stream()
+                .map(s -> PricingStrategyEffectivenessDTO.builder()
+                        .strategyId(s.getId())
+                        .strategyName(s.getStrategyName())
+                        .strategyType(s.getStrategyType())
+                        .timesApplied(s.getTimesApplied() != null ? s.getTimesApplied() : 0)
+                        .totalDiscountGiven(s.getTotalDiscountGiven() != null ? s.getTotalDiscountGiven() : BigDecimal.ZERO)
+                        .totalRevenueGenerated(s.getTotalRevenueGenerated() != null ? s.getTotalRevenueGenerated() : BigDecimal.ZERO)
+                        .lastAppliedAt(s.getLastAppliedAt())
+                        .build())
+                .collect(Collectors.toList());
     }
 
-    private PricingStrategyResponseDTO toPricingStrategyDTO(PricingStrategy strategy) {
-        PricingStrategyResponseDTO dto = new PricingStrategyResponseDTO();
-        dto.setId(strategy.getId());
-        dto.setStrategyName(strategy.getStrategyName());
-        dto.setStrategyType(strategy.getStrategyType());
-        dto.setEventId(strategy.getEvent().getId());
-        dto.setBasePrice(strategy.getBasePrice());
-        dto.setMinPrice(strategy.getMinPrice());
-        dto.setMaxPrice(strategy.getMaxPrice());
-        dto.setDemandMultiplier(strategy.getDemandMultiplier());
-        dto.setTimeBasedIncreaseDays(strategy.getTimeBasedIncreaseDays());
-        dto.setTimeBasedIncreasePercentage(strategy.getTimeBasedIncreasePercentage());
-        dto.setGroupSizeThreshold(strategy.getGroupSizeThreshold());
-        dto.setGroupDiscountPercentage(strategy.getGroupDiscountPercentage());
-        dto.setLifeCycleState(strategy.getLifeCycleState());
-        dto.setApplyAutomatically(strategy.getApplyAutomatically());
-        dto.setLastAppliedAt(strategy.getLastAppliedAt());
-        dto.setCreatedAt(strategy.getCreatedAt());
-        dto.setUpdatedAt(strategy.getUpdatedAt());
-        return dto;
+    // ==================== MÉTODOS DE CONVERSÃO ====================
+
+    private PricingStrategyResponseDTO convertToDTO(PricingStrategy strategy) {
+        return PricingStrategyResponseDTO.builder()
+                .id(strategy.getId())
+                .name(strategy.getStrategyName())
+                .strategyType(strategy.getStrategyType())
+                .eventId(strategy.getEvent().getId())
+                .eventName(strategy.getEvent().getName())
+                .specificCategory(strategy.getSpecificCategory())
+                .daysBeforeEventStart(strategy.getDaysBeforeEventStart())
+                .daysBeforeEventEnd(strategy.getDaysBeforeEventEnd())
+                .customStartDate(strategy.getCustomStartDate())
+                .customEndDate(strategy.getCustomEndDate())
+                .salesThreshold(strategy.getSalesThreshold())
+                .percentageAdjustment(strategy.getPercentageAdjustment())
+                .fixedAdjustment(strategy.getFixedAdjustment())
+                .multiplier(strategy.getMultiplier())
+                .minPrice(strategy.getMinPrice())
+                .maxPrice(strategy.getMaxPrice())
+                .minGroupSize(strategy.getMinGroupSize())
+                .groupDiscountPercentage(strategy.getGroupDiscountPercentage())
+                .loyaltyTier(strategy.getLoyaltyTier())
+                .minPurchases(strategy.getMinPurchases())
+                .minTotalSpent(strategy.getMinTotalSpent())
+                .firstTimeBuyerOnly(strategy.isFirstTimeBuyerOnly())
+                .repeatBuyerOnly(strategy.isRepeatBuyerOnly())
+                .priority(strategy.getPriority())
+                .active(strategy.isActive())
+                .autoApply(strategy.isAutoApply())
+                .lastAppliedAt(strategy.getLastAppliedAt())
+                .timesApplied(strategy.getTimesApplied())
+                .totalDiscountGiven(strategy.getTotalDiscountGiven())
+                .totalRevenueGenerated(strategy.getTotalRevenueGenerated())
+                .createdAt(strategy.getCreatedAt())
+                .updatedAt(strategy.getUpdatedAt())
+                .build();
     }
 
-    private ScheduledPriceChangeResponseDTO toScheduledPriceChangeDTO(ScheduledPriceChange change) {
-        ScheduledPriceChangeResponseDTO dto = new ScheduledPriceChangeResponseDTO();
-        dto.setId(change.getId());
-        dto.setPricingStrategyId(change.getPricingStrategy().getId());
-        dto.setEventTicketId(change.getEventTicket() != null ? change.getEventTicket().getId() : null);
-        dto.setChangeType(change.getChangeType());
-        dto.setChangeValue(change.getChangeValue());
-        dto.setNewPrice(change.getNewPrice());
-        dto.setScheduledAt(change.getScheduledAt());
-        dto.setApplyToAllTickets(change.getApplyToAllTickets());
-        dto.setIsExecuted(change.getIsExecuted());
-        dto.setExecutedAt(change.getExecutedAt());
-        dto.setExecutionResult(change.getExecutionResult());
-        dto.setCreatedAt(change.getCreatedAt());
-        return dto;
-    }
-
-
-    public List<PricingStrategyResponseDTO> findAll(){
-
-        return pricingStrategyRepository.findAllActive().stream().
-                map(this::toPricingStrategyDTO).collect(Collectors.toList());    }
-
-
-}
+    private ScheduledPriceChangeResponseDTO convertToScheduledChangeDTO(ScheduledPriceChange change) {
+        if (change == null) return null;
+        return ScheduledPriceChangeResponseDTO.fromEntity(change);
+    }}

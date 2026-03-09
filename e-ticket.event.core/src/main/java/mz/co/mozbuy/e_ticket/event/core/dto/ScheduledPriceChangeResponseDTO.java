@@ -2,6 +2,7 @@ package mz.co.mozbuy.e_ticket.event.core.dto;
 
 
 
+import lombok.Builder;
 import mz.co.mozbuy.e_ticket.event.core.enums.PriceAdjustmentType;
 import mz.co.mozbuy.e_ticket.event.core.model.ScheduledPriceChange;
 import lombok.AllArgsConstructor;
@@ -14,12 +15,14 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class ScheduledPriceChangeResponseDTO {
     private Long id;
     private Long pricingStrategyId;
     private Long eventTicketId;
     private PriceAdjustmentType changeType;
     private BigDecimal changeValue;
+    private String pricingStrategyName;
     private BigDecimal newPrice;
     private LocalDateTime scheduledAt;
     private Boolean applyToAllTickets;

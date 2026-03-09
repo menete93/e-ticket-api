@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.enums.StrategyType;
 import mz.co.mozbuy.e_ticket.event.core.enums.TicketCategory;
 import mz.co.mozbuy.e_ticket.event.core.exceptions.EventNotFoundException;
 import mz.co.mozbuy.e_ticket.event.core.mapper.EventTicketMapper;
@@ -164,10 +165,11 @@ public class TicketService {
 
         // CORREÇÃO AQUI: atualizar currentPrice
         if (ticketDTO.getPrice() != null && !ticketDTO.getPrice().equals(ticket.getCurrentPrice())) {
-            ticket.updatePrice(ticketDTO.getPrice(), "Manual price update");
+            ticket.updatePrice(ticketDTO.getPrice(),ticketDTO.getChangeReason(), StrategyType.MANUAL.valueOf(), ticketDTO.getStrategyId());
         }
 
-        ticket.setDescription(ticketDTO.getDescription());
+
+            ticket.setDescription(ticketDTO.getDescription());
         ticket.setBenefits(ticketDTO.getBenefits());
         ticket.setMaxTicketsPerUser(ticketDTO.getMaxTicketsPerUser());
 //        ticket.setIsActive(ticketDTO.getIsActive());

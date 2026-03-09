@@ -1,6 +1,7 @@
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
 
+import jakarta.persistence.Column;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -34,6 +35,15 @@ public class TicketRequestDTO {
     @Positive(message = "Quantity must be greater than zero")
     private Integer totalQuantity;
 
+    @NotBlank(message = "change_reason is required")
+    private String changeReason;
+
+//    private String changeType; // MANUAL, SCHEDULED, DYNAMIC, AUTO
+
+    @NotNull(message = "strategyId is required")
+    private Long strategyId; // ID da estratégia que causou a mudança
+
+    @NotBlank(message = "Total price is required")
     private BigDecimal price;
 
     private String description;

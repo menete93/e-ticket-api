@@ -20,13 +20,6 @@ public interface EventTicketRepository extends JpaRepository<EventTicket, Long>,
 
     List<EventTicket> findByEventId(Long eventId);
 
-    @Query("SELECT t FROM EventTicket t " +
-            "WHERE t.event.id = :eventId " +
-            "AND t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
-            "AND t.event.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
-    List<EventTicket> findActiveTicketsByEventIdWithActiveEvent(@Param("eventId") Long eventId);
-
-    List<EventTicket> findByEventIdAndCategory(Long eventId, TicketCategory category);
 
     @Query("SELECT t FROM EventTicket t " +
             "WHERE t.event.id = :eventId " +
@@ -70,5 +63,15 @@ public interface EventTicketRepository extends JpaRepository<EventTicket, Long>,
         // Adicionar outras queries otimizadas
         @Query("SELECT t FROM EventTicket t JOIN FETCH t.event e WHERE t.id = :id")
         Optional<EventTicket> findByIdWithEvent(@Param("id") Long id);
+
+
+    // NOVOS MÉTODOS NO EventTicketRepository
+    @Query("SELECT COUNT(et) FROM EventTicket et " +
+            "WHERE et.event.id = :eventId " +
+            "AND (:category IS NULL OR et.category = :category)")
+    long countByEventIdAndCategory(@Param("eventId") Long eventId,
+                                   @Param("category") TicketCategory category);
+
+    List<EventTicket> findByEventIdAndCategory(Long eventId, TicketCategory category);
 
 }

@@ -92,20 +92,26 @@ public class EventTicket extends AuditableEntity<Long, String> {
                 (salesEndDate == null || now.isBefore(salesEndDate));
     }
 
-    public void updatePrice(BigDecimal newPrice, String reason) {
+    // NOVO MÉTODO NO EventTicket (adicione à classe existente)
+    public void updatePrice(BigDecimal newPrice, String reason, String changeType, Long strategyId) {
         if (this.currentPrice != null && !this.currentPrice.equals(newPrice)) {
-            // Registrar no histórico
+            // Criar histórico
             TicketPriceHistory history = new TicketPriceHistory();
             history.setEventTicket(this);
             history.setOldPrice(this.currentPrice);
             history.setNewPrice(newPrice);
             history.setChangeReason(reason);
             history.setChangedAt(LocalDateTime.now());
+            history.setChangeType(changeType);
+            history.setStrategyId(strategyId);
+
+            if (this.priceHistory == null) {
+                this.priceHistory = new ArrayList<>();
+            }
             this.priceHistory.add(history);
         }
         this.currentPrice = newPrice;
     }
-
     public void reserveTicket(Integer quantity) {
         if (availableQuantity >= quantity) {
             availableQuantity -= quantity;
@@ -139,5 +145,23 @@ public class EventTicket extends AuditableEntity<Long, String> {
 
     public Double getSoldPercentage() {
         return totalQuantity > 0 ? (soldQuantity.doubleValue() / totalQuantity.doubleValue()) * 100 : 0.0;
+    }
+
+    private BigDecimal getBasePrice(EventTicket ticket, PricingStrategy strategy) {
+        // Para estratégias de demanda/tiragem, o mais lógico é usar o preço original
+        // como referência, pois ele representa o valor "base" do ingresso
+
+        BigDecimal basePrice;
+
+        // 1. Tenta usar o preço original do ticket
+        if (ticket.getOriginalPrice() != null) {
+            basePrice = ticket.getOriginalPrice();
+        }
+        // 2. Se não tem original, usa o current (pode já ter sido alterado)
+        else {
+            basePrice = ticket.getCurrentPrice();
+        }
+
+        return basePrice;
     }
 }

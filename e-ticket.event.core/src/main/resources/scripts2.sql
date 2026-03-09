@@ -256,7 +256,8 @@ CREATE TABLE ticket_price_history (
                                       old_price DECIMAL(15,2),
                                       new_price DECIMAL(15,2),
                                       change_reason VARCHAR(500),
-                                      change_type VARCHAR(50),
+                                      strategyId BIGINT,
+--                                       change_type VARCHAR(50),  trocado por                                        strategyId BIGINT,
                                       changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     -- Auditoria
