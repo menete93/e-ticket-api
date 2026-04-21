@@ -15,6 +15,8 @@ import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
 import mz.co.mozbuy.e_ticket.event.core.repository.OrganizerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -158,37 +160,52 @@ public class EventService {
      * Atualiza um evento
      */
     @Transactional
-    public EventResponseDTO updateEvent(Long eventId, EventRequestDTO eventDTO) {
+    public EventResponseDTO updateEvent(Long eventId, EventUpdateDTO eventUpdate) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new EventNotFoundException(eventId));
 
-        EventCategory category = eventCategoryRepository.findById(eventDTO.getCategoryId())
-                .orElseThrow(() -> new EventCategoryNotFoundException( eventDTO.getCategoryId()));
+        // Atualiza apenas campos não nulos
+        if (eventUpdate.getName() != null) {
+            event.setName(eventUpdate.getName());
+        }
+        if (eventUpdate.getDescription() != null) {
+            event.setDescription(eventUpdate.getDescription());
+        }
+        if (eventUpdate.getEventDate() != null) {
+            event.setEventDate(eventUpdate.getEventDate());
+        }
+        if (eventUpdate.getStartTime() != null) {
+            event.setStartTime(eventUpdate.getStartTime());
+        }
+        if (eventUpdate.getEndTime() != null) {
+            event.setEndTime(eventUpdate.getEndTime());
+        }
+        if (eventUpdate.getMaxAttendees() != null) {
+            event.setMaxAttendees(eventUpdate.getMaxAttendees());
+        }
+        if (eventUpdate.getMinAttendees() != null) {
+            event.setMinAttendees(eventUpdate.getMinAttendees());
+        }
+        if (eventUpdate.getIsPublic() != null) {
+            event.setIsPublic(eventUpdate.getIsPublic());
+        }
+        if (eventUpdate.getIsFeatured() != null) {
+            event.setIsFeatured(eventUpdate.getIsFeatured());
+        }
+        if (eventUpdate.getIsFree() != null) {
+            event.setIsFree(eventUpdate.getIsFree());
+        }
+        if (eventUpdate.getRegistrationDeadline() != null) {
+            event.setRegistrationDeadline(eventUpdate.getRegistrationDeadline());
+        }
 
-        // Atualizar campos
-        event.setDescription(eventDTO.getDescription());
-        event.setGeographicLocation(eventDTO.getGeographicLocation());
-        event.setCategory(category);
-        event.setEventDate(eventDTO.getEventDate());
-        event.setStartTime(eventDTO.getStartTime());
-        event.setEndTime(eventDTO.getEndTime());
-        event.setCoverImageUrl(eventDTO.getCoverImageUrl());
-        event.setBannerImageUrl(eventDTO.getBannerImageUrl());
-        event.setMaxAttendees(eventDTO.getMaxAttendees());
-        event.setMinAttendees(eventDTO.getMinAttendees());
-        event.setIsPublic(eventDTO.getIsPublic());
-        event.setIsFeatured(eventDTO.getIsFeatured());
-        event.setIsFree(eventDTO.getIsFree());
-        event.setRegistrationDeadline(eventDTO.getRegistrationDeadline());
-
-        // Set updated by
+        event.setUpdatedAt(LocalDateTime.now());
 
         Event updatedEvent = eventRepository.save(event);
         log.info("Event updated: {} by {}", updatedEvent.getName());
 
         return eventMapper.toDTO(updatedEvent);
     }
-
     /**
      * Lista todos os eventos
      */
@@ -350,5 +367,64 @@ public class EventService {
 
             return new ArrayList<>(eventMap.values());
 
+    }
+
+
+
+    public List<EventResponseDTO> findByStateAndOrganizerId(String referenceId) {
+
+        // Use o método COM JOIN FETCH para carregar tickets
+        List<Event> events = eventRepository.findActiveEventsByOrganizerWithTickets(referenceId);
+        System.out.println("Eventos encontrados para o organizador com tickets: " + events.size());
+
+        if (!events.isEmpty()) {
+            Event primeiro = events.get(0);
+            System.out.println("Primeiro evento: " + primeiro.getName());
+            System.out.println("Tickets carregados: " + primeiro.getTickets().size());
+        }
+
+        if (events.isEmpty()) {
+            throw new EventNotFoundException();
+        }
+
+        // Converta para DTO
+        return events.stream()
+                .map(eventMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+
+    @Transactional
+    public EventResponseDTO cancelEvent(Long eventId, CancelEventRequestDTO cancelRequest) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EventNotFoundException(eventId));
+
+        // Verificar se já foi cancelado
+        if (Boolean.TRUE.equals(event.getIsCancelled())) {
+            throw new IllegalStateException("Evento já está cancelado");
+        }
+
+        // Verificar se o evento já ocorreu
+        if (event.getEventDate() != null && event.getEventDate().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException("Não é possível cancelar um evento que já ocorreu");
+        }
+
+        // Cancelar o evento
+        event.setIsCancelled(true);
+        event.setCancelledAt(LocalDateTime.now());
+        event.setCancelReason(cancelRequest.getReason());
+
+        // Se houver tickets vendidos e organizador optou por reembolsar
+        if (Boolean.TRUE.equals(cancelRequest.getRefundTickets()) && event.getSoldTickets() > 0) {
+            event.setRefundProcessed(true);
+            // Disparar processo de reembolso assíncrono  POR IMPLEMENTAR UMA TASK
+//            refundService.processRefundsForEvent(eventId);
+        }
+
+        Event updatedEvent = eventRepository.save(event);
+        log.info("Event cancelled: {} (ID: {}) - Reason: {}",
+                event.getName(), event.getId(), cancelRequest.getReason());
+
+        return eventMapper.toDTO(updatedEvent);
     }
 }

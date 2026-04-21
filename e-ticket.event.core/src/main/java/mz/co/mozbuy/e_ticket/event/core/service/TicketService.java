@@ -5,6 +5,8 @@ import jakarta.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
+import mz.co.mozbuy.e_ticket.event.core.dto.BatchUpdateTicketsDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.TicketQuantityUpdateDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.enums.StrategyType;
@@ -142,46 +144,84 @@ public class TicketService {
      * Atualiza um bilhete existente
      */
     @Transactional
-    public TicketResponseDTO updateTicket(Long eventId, Long ticketId, TicketRequestDTO ticketDTO) {
-        EventTicket ticket = eventTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found with id: " + ticketId));
+    public List<TicketResponseDTO> batchUpdateTickets(BatchUpdateTicketsDTO batchUpdate) {
+        List<TicketResponseDTO> results = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
 
-        if (!ticket.getEvent().getId().equals(eventId)) {
-            throw new RuntimeException("Ticket does not belong to the specified event");
-        }
+        int totalNewQuantity = 0;
+        int eventMaxAttendees = 0;
 
-        // Verificar se pode alterar a quantidade total
-        if (!ticketDTO.getTotalQuantity().equals(ticket.getTotalQuantity())) {
-            int difference = ticketDTO.getTotalQuantity() - ticket.getTotalQuantity();
-            if (difference < 0 && Math.abs(difference) > ticket.getAvailableQuantity()) {
-                throw new RuntimeException("Cannot reduce total quantity below sold + reserved tickets");
+        // Primeiro, buscar o evento e validar capacidade total
+        Event event = eventRepository.findById(batchUpdate.getEventId())
+                .orElseThrow(() -> new RuntimeException("Event not found"));
+
+        eventMaxAttendees = event.getMaxAttendees() != null ? event.getMaxAttendees() : Integer.MAX_VALUE;
+
+        // Calcular novo total de ingressos
+        for (TicketQuantityUpdateDTO update : batchUpdate.getTickets()) {
+            EventTicket ticket = eventTicketRepository.findById(update.getTicketId())
+                    .orElseThrow(() -> new RuntimeException("Ticket not found: " + update.getTicketId()));
+
+            if (!ticket.getEvent().getId().equals(batchUpdate.getEventId())) {
+                throw new RuntimeException("Ticket " + update.getTicketId() + " does not belong to event");
             }
-            ticket.setAvailableQuantity(ticket.getAvailableQuantity() + difference);
+
+            totalNewQuantity += update.getTotalQuantity();
         }
 
-        ticket.setCategory(ticketDTO.getCategory());
-        ticket.setTicketName(ticketDTO.getTicketName());
-        ticket.setTotalQuantity(ticketDTO.getTotalQuantity());
-
-        // CORREÇÃO AQUI: atualizar currentPrice
-        if (ticketDTO.getPrice() != null && !ticketDTO.getPrice().equals(ticket.getCurrentPrice())) {
-            ticket.updatePrice(ticketDTO.getPrice(),ticketDTO.getChangeReason(), StrategyType.MANUAL.valueOf(), ticketDTO.getStrategyId());
+        // Validar capacidade total
+        if (totalNewQuantity > eventMaxAttendees) {
+            throw new RuntimeException("Total tickets (" + totalNewQuantity +
+                    ") exceeds event capacity (" + eventMaxAttendees + ")");
         }
 
+        // Atualizar cada ticket
+        for (TicketQuantityUpdateDTO update : batchUpdate.getTickets()) {
+            try {
+                EventTicket ticket = eventTicketRepository.findById(update.getTicketId())
+                        .orElseThrow(() -> new RuntimeException("Ticket not found: " + update.getTicketId()));
 
-            ticket.setDescription(ticketDTO.getDescription());
-        ticket.setBenefits(ticketDTO.getBenefits());
-        ticket.setMaxTicketsPerUser(ticketDTO.getMaxTicketsPerUser());
-//        ticket.setIsActive(ticketDTO.getIsActive());
+                int difference = update.getTotalQuantity() - ticket.getTotalQuantity();
 
-        EventTicket updatedTicket = eventTicketRepository.save(ticket);
-        updatedTicket.getEvent().updateTicketStatistics();
-        eventRepository.save(updatedTicket.getEvent());
+                // Verificar se pode reduzir
+                if (difference < 0 && Math.abs(difference) > ticket.getAvailableQuantity()) {
+                    errors.add(String.format("Ticket '%s': Cannot reduce below sold quantity (Sold: %d)",
+                            ticket.getTicketName(), ticket.getSoldQuantity()));
+                    continue;
+                }
 
-        log.info("Ticket updated: {} - {}", ticketDTO.getCategory(), ticketDTO.getTicketName());
-        return toDTO(updatedTicket);
+                // Atualizar quantidade
+                ticket.setTotalQuantity(update.getTotalQuantity());
+                ticket.setAvailableQuantity(ticket.getAvailableQuantity() + difference);
+
+                // Registrar motivo
+                String reason = update.getChangeReason() != null ? update.getChangeReason()
+                        : (batchUpdate.getGlobalChangeReason() != null ? batchUpdate.getGlobalChangeReason()
+                        : "Batch update");
+
+                log.info("Ticket {} quantity updated from {} to {}. Reason: {}",
+                        ticket.getId(), ticket.getTotalQuantity(), update.getTotalQuantity(), reason);
+
+                results.add(toDTO(ticket));
+
+            } catch (Exception e) {
+                errors.add("Error updating ticket " + update.getTicketId() + ": " + e.getMessage());
+            }
+        }
+
+        // Se houver erros, lançar exceção com detalhes
+        if (!errors.isEmpty()) {
+            throw new RuntimeException("Partial update failed: " + String.join("; ", errors));
+        }
+
+        // Atualizar estatísticas do evento
+        event.updateTicketStatistics();
+        eventRepository.save(event);
+
+        log.info("Batch update completed: {} tickets updated for event {}", results.size(), batchUpdate.getEventId());
+
+        return results;
     }
-
     /**
      * Cria categorias de bilhetes padrão para um evento
      */
@@ -217,6 +257,9 @@ public class TicketService {
 
         return eventTicketRepository.saveAll(defaultTickets);
     }
+
+
+
 
     private EventTicket createDefaultTicket(Event event, TicketCategory category,
                                             Integer quantity, BigDecimal price,

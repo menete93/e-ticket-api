@@ -3,8 +3,10 @@ package mz.co.mozbuy.e_ticket.event.core.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import mz.co.mozbuy.e_ticket.event.core.dto.BatchUpdateTicketsDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.TicketResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.UpdateTicketQuantityDTO;
 import mz.co.mozbuy.e_ticket.event.core.service.TicketService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,14 +29,19 @@ public class TicketController {
         return ResponseEntity.status(HttpStatus.CREATED).body(createdTicket);
     }
 
-    @PutMapping("/{ticketId}")
-    public ResponseEntity<TicketResponseDTO> updateTicket(
-            @Valid @RequestBody TicketRequestDTO ticketDTO) {
 
-        TicketResponseDTO updatedTicket = eventTicketService.updateTicket(ticketDTO.getEventId(), ticketDTO.getTicketId(), ticketDTO);
-        return ResponseEntity.ok(updatedTicket);
+    @PutMapping("/event/{eventId}/tickets/batch")
+    public ResponseEntity<List<TicketResponseDTO>> batchUpdateTickets(
+            @PathVariable("eventId") Long eventId,
+            @RequestBody BatchUpdateTicketsDTO batchUpdate) {
+
+        if (!eventId.equals(batchUpdate.getEventId())) {
+            throw new IllegalArgumentException("Event ID in path does not match request body");
+        }
+
+        List<TicketResponseDTO> updated = eventTicketService.batchUpdateTickets(batchUpdate);
+        return ResponseEntity.ok(updated);
     }
-
     @PostMapping("/default")
     public ResponseEntity<String> createDefaultTickets(
             @PathVariable("default") Long eventId) {

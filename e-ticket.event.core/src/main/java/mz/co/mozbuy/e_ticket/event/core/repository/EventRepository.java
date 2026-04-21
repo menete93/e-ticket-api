@@ -117,4 +117,14 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
             "WHERE e.lifeCycleState = :state")
     List<Event> findByStateWithTickets(@Param("state") LifeCycleState state);
 
+
+    @Query("""
+    SELECT e FROM Event e
+    LEFT JOIN FETCH e.tickets
+    WHERE e.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE
+      AND e.organizer.referenceId = :referenceId
+""")
+    List<Event> findActiveEventsByOrganizerWithTickets(@Param("referenceId") String referenceId);
+
+
 }

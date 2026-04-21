@@ -1,22 +1,27 @@
 package mz.co.mozbuy.e_ticket.event.core.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.CreateSaleDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.SaleResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.calculateDto.PriceBreakdownItemDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.calculateDto.PriceCalculationRequestDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.calculateDto.PriceCalculationResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.enums.CommissionCalculation;
 import mz.co.mozbuy.e_ticket.event.core.enums.SaleStatus;
 import mz.co.mozbuy.e_ticket.event.core.exceptions.*;
 import mz.co.mozbuy.e_ticket.event.core.model.*;
 import mz.co.mozbuy.e_ticket.event.core.repository.*;
+import mz.co.mozbuy.e_ticket.event.core.service.calculate.TicketPricingService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,88 +34,218 @@ public class TicketSaleService {
     private final OrganizerRepository organizerRepository;
     private final DiscountCouponRepository discountCouponRepository;
     private final TicketSaleRepository ticketSaleRepository;
+    private final LoyaltyService loyaltyService;
+    private final TicketPricingService ticketPricingService;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public SaleResponseDTO createSale(CreateSaleDTO saleDTO) {
-        log.info("Creating sale for ticket: {}, quantity: {}",
-                saleDTO.getTicketId(), saleDTO.getQuantity());
+        log.info("📝 Creating sale for ticket: {}, quantity: {}, user: {}",
+                saleDTO.getTicketId(), saleDTO.getQuantity(), saleDTO.getUserId());
 
-        // 1. Buscar ticket com LOCK PESSIMISTA (evita concorrência)
+        // 1. Buscar ticket com LOCK PESSIMISTA
         EventTicket ticket = eventTicketRepository.findByIdWithLock(saleDTO.getTicketId())
                 .orElseThrow(() -> new TicketNotFoundException(saleDTO.getTicketId()));
 
-        // 2. Validar ticket para venda (método unificado)
+        // 2. Validar ticket para venda
         validateTicketForSale(ticket, saleDTO.getQuantity());
 
         Event event = ticket.getEvent();
         Organizer organizer = event.getOrganizer();
 
-        // 3. Calcular preço base
-        BigDecimal unitPrice = ticket.getCurrentPrice();
-        BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(saleDTO.getQuantity()));
+        // 3. Calcular preço com as estratégias
+        PriceCalculationResponseDTO priceCalculation = calculatePriceWithStrategies(saleDTO, ticket, event);
 
-        // 4. Aplicar cupom se fornecido
+        // 4. Validar preço esperado (se fornecido)
+        if (saleDTO.getExpectedTotalAmount() != null) {
+            validateExpectedPrice(saleDTO.getExpectedTotalAmount(), priceCalculation.getFinalPrice());
+        }
+
+        // 5. Aplicar cupom se fornecido
         DiscountCoupon coupon = null;
-        BigDecimal discountAmount = BigDecimal.ZERO;
+        BigDecimal couponDiscount = BigDecimal.ZERO;
+        BigDecimal finalAmount = priceCalculation.getFinalPrice();
 
         if (saleDTO.getCouponCode() != null && !saleDTO.getCouponCode().trim().isEmpty()) {
-            coupon = applyCoupon(saleDTO.getCouponCode(), event, subtotal);
+            coupon = applyCoupon(saleDTO.getCouponCode(), event, priceCalculation.getSubtotal());
             if (coupon != null) {
-                discountAmount = coupon.applyDiscount(subtotal);
-                coupon.useCoupon(); // Incrementar contador de uso
+                couponDiscount = coupon.applyDiscount(priceCalculation.getSubtotal());
+                finalAmount = priceCalculation.getSubtotal().subtract(couponDiscount);
+                coupon.useCoupon();
+                log.info("🎟️ Coupon applied: {}, discount: {}", coupon.getCode(), couponDiscount);
             }
         }
 
-        BigDecimal totalAmount = subtotal.subtract(discountAmount);
+        // 6. Calcular comissão
+        CommissionCalculation commission = calculateCommission(
+                finalAmount, organizer, event, saleDTO.getQuantity());
 
-        // 5. Calcular comissão (ESTRATÉGIA HÍBRIDA)
-        CommissionCalculation commission = calculateCommission(totalAmount, organizer,
-                event, saleDTO.getQuantity());
+        // 7. Criar registro de venda com o modelo TicketSale
+        TicketSale sale = createTicketSale(
+                saleDTO,
+                ticket,
+                event,
+                organizer,
+                coupon,
+                priceCalculation,
+                couponDiscount,
+                finalAmount,
+                commission
+        );
 
-        // 6. Criar registro de venda
-        TicketSale sale = createSaleRecord(saleDTO, ticket, event, organizer, coupon,
-                unitPrice, subtotal, discountAmount, totalAmount, commission);
-
-        // 7. Atualizar estoque (COM LOCK GARANTIDO)
+        // 8. Atualizar estoque
         updateTicketInventory(ticket, saleDTO.getQuantity());
 
-        // 8. Atualizar estatísticas financeiras
-        updateFinancialStats(event, totalAmount, commission.amount(), commission.payout());
+        // 9. Atualizar estatísticas financeiras
+        updateFinancialStats(event, finalAmount, commission.amount(), commission.payout());
 
-        // 9. Atualizar organizador
-        updateOrganizerStats(organizer, totalAmount, commission.amount(), saleDTO.getQuantity());
+        // 10. Atualizar organizador
+        updateOrganizerStats(organizer, finalAmount, commission.amount(), saleDTO.getQuantity());
 
-        // 10. Se for evento trial, marcar como usado
+        // 11. Se for evento trial, marcar como usado
         if (commission.isTrial()) {
             organizer.consumeTrialEvent();
         }
 
-        // 11. Salvar todas as alterações (ORDEM IMPORTANTE)
-        // Primeiro: Salvar ticket (já atualizado)
-        eventTicketRepository.save(ticket);
+        // 12. Atualizar histórico de fidelidade
+        if (saleDTO.getUserId() != null) {
+            loyaltyService.updateCustomerHistory(
+                    saleDTO.getUserId(),
+                    ticket,
+                    saleDTO.getQuantity(),
+                    finalAmount,
+                    event
+            );
+        }
 
-        // Segundo: Salvar cupom (se usado)
+        // 13. Salvar todas as alterações
+        eventTicketRepository.save(ticket);
         if (coupon != null) {
             discountCouponRepository.save(coupon);
         }
-
-        // Terceiro: Salvar evento (estatísticas atualizadas)
         eventRepository.save(event);
-
-        // Quarto: Salvar organizador (saldo atualizado)
         organizerRepository.save(organizer);
+        TicketSale savedSale = ticketSaleRepository.save(sale);
 
-        // Quinto: Salvar venda (depende dos anteriores)
-        ticketSaleRepository.save(sale);
+        log.info("✅ Sale created successfully. Transaction ID: {}, Total: {}, Discounts: {}",
+                savedSale.getTransactionId(), finalAmount, savedSale.getTotalDiscount());
 
-        log.info("Sale created successfully. Transaction ID: {}, Commission: {}%, Amount: {}",
-                sale.getTransactionId(),
-                commission.rate().multiply(BigDecimal.valueOf(100)),
-                commission.amount());
-
-        return SaleResponseDTO.fromEntity(sale);
+        return SaleResponseDTO.fromEntity(savedSale);
     }
 
+    /**
+     * Cria o objeto TicketSale com todos os dados
+     */
+    private TicketSale createTicketSale(
+            CreateSaleDTO saleDTO,
+            EventTicket ticket,
+            Event event,
+            Organizer organizer,
+            DiscountCoupon coupon,
+            PriceCalculationResponseDTO priceCalculation,
+            BigDecimal couponDiscount,
+            BigDecimal finalAmount,
+            CommissionCalculation commission) {
+
+        // Calcular preço unitário baseado no original
+        BigDecimal originalPrice = ticket.getOriginalPrice() != null ?
+                ticket.getOriginalPrice() : ticket.getCurrentPrice();
+
+        BigDecimal subtotal = originalPrice.multiply(BigDecimal.valueOf(saleDTO.getQuantity()));
+
+        TicketSale sale = TicketSale.builder()
+                // Identificação
+                .transactionId(generateTransactionId())
+
+                // Relacionamentos
+                .event(event)
+                .ticket(ticket)
+                .organizer(organizer)
+                .discountCoupon(coupon)
+                .userId(saleDTO.getUserId())
+
+                // Quantidade e preços
+                .quantity(saleDTO.getQuantity())
+                .unitPrice(originalPrice)
+                .subtotal(subtotal)
+                .discountAmount(couponDiscount)
+                .totalAmount(finalAmount)
+
+                // Comissão
+                .commissionRate(commission.rate())
+                .commissionAmount(commission.amount())
+                .organizerPayout(commission.payout())
+
+                // Dados do comprador
+                .buyerEmail(saleDTO.getBuyerEmail())
+                .buyerName(saleDTO.getBuyerName())
+                .buyerPhone(saleDTO.getBuyerPhone())
+
+                // Status
+                .status(SaleStatus.PENDING)
+
+                // Flags
+                .isTrialEvent(commission.isTrial())
+
+                // UTMs (capturados automaticamente)
+                .utmSource(saleDTO.getUtmSource())
+                .utmMedium(saleDTO.getUtmMedium())
+                .utmCampaign(saleDTO.getUtmCampaign())
+
+                .build();
+
+        // Adicionar estratégias aplicadas (usa o método de conveniência)
+        if (priceCalculation.getAppliedStrategies() != null &&
+                !priceCalculation.getAppliedStrategies().isEmpty()) {
+
+            sale.addAppliedStrategies(priceCalculation.getAppliedStrategies());
+
+            // Se houver desconto das estratégias, registrar
+            BigDecimal strategiesDiscount = priceCalculation.getSubtotal()
+                    .subtract(priceCalculation.getDiscountedPrice());
+            sale.setTotalDiscountFromStrategies(strategiesDiscount);
+        }
+
+        return sale;
+    }
+
+    /**
+     * Calcula preço com estratégias
+     */
+    private PriceCalculationResponseDTO calculatePriceWithStrategies(
+            CreateSaleDTO saleDTO,
+            EventTicket ticket,
+            Event event) {
+
+        Map<Long, Integer> quantities = new HashMap<>();
+        quantities.put(ticket.getId(), saleDTO.getQuantity());
+
+        PriceCalculationRequestDTO request = PriceCalculationRequestDTO.builder()
+                .eventId(event.getId())
+                .ticketQuantities(quantities)
+                .userId(saleDTO.getUserId())
+                .email(saleDTO.getBuyerEmail())
+                .build();
+
+        return ticketPricingService.calculatePrice(request);
+    }
+
+    /**
+     * Valida preço esperado
+     */
+    private void validateExpectedPrice(BigDecimal expected, BigDecimal calculated) {
+        BigDecimal difference = expected.subtract(calculated).abs();
+        BigDecimal tolerance = new BigDecimal("0.01");
+
+        if (difference.compareTo(tolerance) > 0) {
+            log.error("⚠️ PREÇO INCONSISTENTE! Esperado: {}, Calculado: {}", expected, calculated);
+            throw new RuntimeException("Preço inconsistente com as estratégias aplicáveis");
+        }
+    }
+
+    /**
+     * Valida ticket para venda
+     */
     private void validateTicketForSale(EventTicket ticket, Integer requestedQuantity) {
         if (!ticket.getLifeCycleState().equals(LifeCycleState.ACTIVE)) {
             throw new TicketNotActiveException();
@@ -125,32 +260,9 @@ public class TicketSaleService {
         }
     }
 
-    // 🔥 MÉTODO IMPLEMENTADO: Validar disponibilidade do ticket
-    private void validateTicketAvailability(EventTicket ticket, Integer requestedQuantity) {
-        if (!ticket.getLifeCycleState().equals(LifeCycleState.ACTIVE)) {
-            throw new RuntimeException("Ticket is not active");
-        }
-
-        if (!ticket.isAvailable()) {
-            throw new RuntimeException("Ticket is sold out");
-        }
-
-        if (ticket.getAvailableQuantity() < requestedQuantity) {
-            throw new RuntimeException(
-                    String.format("Only %d tickets available, requested %d",
-                            ticket.getAvailableQuantity(), requestedQuantity)
-            );
-        }
-    }
-
-    // 🔥 MÉTODO IMPLEMENTADO: Validar período de vendas
-    private void validateSalesPeriod(EventTicket ticket) {
-        if (!ticket.isSalesPeriodActive()) {
-            throw new RuntimeException("Ticket sales period is not active");
-        }
-    }
-
-    // 🔥 MÉTODO IMPLEMENTADO: Aplicar cupom
+    /**
+     * Aplica cupom
+     */
     private DiscountCoupon applyCoupon(String couponCode, Event event, BigDecimal purchaseAmount) {
         DiscountCoupon coupon = discountCouponRepository
                 .findByCodeAndEventId(couponCode, event.getId())
@@ -164,17 +276,17 @@ public class TicketSaleService {
             throw new RuntimeException("Coupon cannot be applied to this purchase amount");
         }
 
-        coupon.useCoupon();
         return coupon;
     }
 
-    // 🔥 MÉTODO IMPLEMENTADO: Calcular comissão
+    /**
+     * Calcula comissão
+     */
     private CommissionCalculation calculateCommission(BigDecimal totalAmount, Organizer organizer,
                                                       Event event, Integer quantity) {
         boolean isTrialEvent = event.isEligibleForTrial();
 
         if (isTrialEvent) {
-            // ESTRATÉGIA: Trial - 0% de comissão
             return new CommissionCalculation(
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
@@ -182,20 +294,12 @@ public class TicketSaleService {
                     true
             );
         } else {
-            // ESTRATÉGIA HÍBRIDA: Taxa fixa + percentual
             BigDecimal commissionRate = event.getEffectiveCommissionRate();
             BigDecimal flatFee = event.getEffectiveFlatFee();
 
-            // Calcular comissão da taxa fixa
             BigDecimal flatFeeCommission = flatFee.multiply(BigDecimal.valueOf(quantity));
-
-            // Calcular comissão do percentual
             BigDecimal percentageCommission = totalAmount.multiply(commissionRate);
-
-            // Total da comissão
             BigDecimal totalCommission = flatFeeCommission.add(percentageCommission);
-
-            // Payout para o organizador
             BigDecimal payout = totalAmount.subtract(totalCommission);
 
             return new CommissionCalculation(
@@ -207,111 +311,124 @@ public class TicketSaleService {
         }
     }
 
-    // 🔥 MÉTODO IMPLEMENTADO: Criar registro de venda
-    private TicketSale createSaleRecord(CreateSaleDTO saleDTO, EventTicket ticket, Event event,
-                                        Organizer organizer, DiscountCoupon coupon,
-                                        BigDecimal unitPrice, BigDecimal subtotal,
-                                        BigDecimal discountAmount, BigDecimal totalAmount,
-                                        CommissionCalculation commission) {
-        TicketSale sale = new TicketSale();
-        sale.setTransactionId(generateTransactionId());
-        sale.setEvent(event);
-        sale.setTicket(ticket);
-        sale.setOrganizer(organizer);
-        sale.setDiscountCoupon(coupon);
-        sale.setQuantity(saleDTO.getQuantity());
-        sale.setUnitPrice(unitPrice);
-        sale.setSubtotal(subtotal);
-        sale.setDiscountAmount(discountAmount);
-        sale.setTotalAmount(totalAmount);
-        sale.setCommissionRate(commission.rate());
-        sale.setCommissionAmount(commission.amount());
-        sale.setOrganizerPayout(commission.payout());
-        sale.setBuyerEmail(saleDTO.getBuyerEmail());
-        sale.setBuyerName(saleDTO.getBuyerName());
-        sale.setBuyerPhone(saleDTO.getBuyerPhone());
-        sale.setIsTrialEvent(commission.isTrial());
-
-        // Status inicial
-        sale.setStatus(SaleStatus.PENDING);
-
-        return sale;
-    }
-
-    // 🔥 MÉTODO IMPLEMENTADO: Atualizar inventário do ticket
+    /**
+     * Atualiza inventário do ticket
+     */
     private void updateTicketInventory(EventTicket ticket, Integer quantity) {
-        // VALIDAÇÃO EXTRA (redundante mas segura)
         if (ticket.getAvailableQuantity() < quantity) {
-            // Isso não deveria acontecer, mas é um fail-safe
             throw new IllegalStateException(
                     String.format("Concurrency issue detected! Ticket %d: available %d, requested %d",
                             ticket.getId(), ticket.getAvailableQuantity(), quantity)
             );
         }
 
-        // ATUALIZAÇÃO ATÔMICA (dentro da transação com lock)
         int newSoldQuantity = ticket.getSoldQuantity() + quantity;
         int newAvailableQuantity = ticket.getAvailableQuantity() - quantity;
 
         ticket.setSoldQuantity(newSoldQuantity);
         ticket.setAvailableQuantity(newAvailableQuantity);
 
-        // Atualizar estatísticas do evento
         Event event = ticket.getEvent();
         if (event != null) {
             event.setSoldTickets(event.getSoldTickets() + quantity);
             event.setAvailableTickets(event.getAvailableTickets() - quantity);
-            event.updateTicketStatistics(); // Recalcula totais
+            event.updateTicketStatistics();
         }
     }
-    // 🔥 MÉTODO IMPLEMENTADO: Atualizar estatísticas financeiras
+
+    /**
+     * Atualiza estatísticas financeiras
+     */
     private void updateFinancialStats(Event event, BigDecimal saleAmount,
                                       BigDecimal commission, BigDecimal payout) {
-        // Atualizar estatísticas do evento
         event.updateFinancialStats(saleAmount, commission, payout);
-
-        // Atualizar estatísticas de tickets do evento
         event.updateTicketStatistics();
     }
 
-    // 🔥 MÉTODO IMPLEMENTADO: Atualizar estatísticas do organizador
+    /**
+     * Atualiza estatísticas do organizador
+     */
     private void updateOrganizerStats(Organizer organizer, BigDecimal saleAmount,
                                       BigDecimal commission, Integer quantity) {
         if (organizer == null) return;
 
-        // Atualizar earnings
         organizer.addEarnings(saleAmount);
 
-        // Atualizar comissão paga (se não for trial)
         if (commission.compareTo(BigDecimal.ZERO) > 0) {
             organizer.addCommissionPaid(commission);
         }
 
-        // Atualizar contador de tickets vendidos
         organizer.incrementTicketsSold(quantity);
     }
 
-    // 🔥 MÉTODO IMPLEMENTADO: Gerar ID de transação
+    /**
+     * Gera ID de transação único
+     */
     private String generateTransactionId() {
         return "TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase() +
                 "-" + System.currentTimeMillis();
     }
 
-    // 🔥 MÉTODO ADICIONAL: Processar pagamento (para integração futura)
+    // ==================== MÉTODOS DE CONSULTA ====================
+
+    @Transactional(readOnly = true)
+    public SaleResponseDTO getSaleByTransactionId(String transactionId) {
+        TicketSale sale = ticketSaleRepository.findByTransactionId(transactionId)
+                .orElseThrow(() -> new RuntimeException("Sale not found with transactionId: " + transactionId));
+        return SaleResponseDTO.fromEntity(sale);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SaleResponseDTO> getSalesByEventId(Long eventId) {
+        return ticketSaleRepository.findByEventId(eventId).stream()
+                .map(SaleResponseDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SaleResponseDTO> getSalesByOrganizerId(Long organizerId) {
+        return ticketSaleRepository.findByOrganizerId(organizerId).stream()
+                .map(SaleResponseDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Double calculatePriceWithCoupon(Long ticketId, Integer quantity, String couponCode) {
+        EventTicket ticket = eventTicketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found with id: " + ticketId));
+
+        Event event = ticket.getEvent();
+        BigDecimal originalPrice = ticket.getOriginalPrice() != null ?
+                ticket.getOriginalPrice() : ticket.getCurrentPrice();
+        BigDecimal subtotal = originalPrice.multiply(BigDecimal.valueOf(quantity));
+
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        if (couponCode != null && !couponCode.trim().isEmpty()) {
+            DiscountCoupon coupon = discountCouponRepository
+                    .findByCodeAndEventId(couponCode, event.getId())
+                    .orElseThrow(() -> new RuntimeException("Coupon not found: " + couponCode));
+
+            if (coupon.isValid() && coupon.canApplyToPurchase(subtotal)) {
+                discountAmount = coupon.applyDiscount(subtotal);
+            }
+        }
+
+        return subtotal.subtract(discountAmount).doubleValue();
+    }
+
+    // ==================== MÉTODOS DE GESTÃO ====================
+
     @Transactional
     public SaleResponseDTO processPayment(String transactionId, String paymentMethod,
                                           String paymentReference) {
         TicketSale sale = ticketSaleRepository.findByTransactionId(transactionId)
                 .orElseThrow(() -> new RuntimeException("Sale not found: " + transactionId));
 
-        // Marcar como pago
         sale.markAsPaid(paymentMethod, paymentReference);
 
-        // Atualizar saldo do organizador
         Organizer organizer = sale.getOrganizer();
         organizer.addToBalance(sale.getOrganizerPayout());
 
-        // Salvar alterações
         ticketSaleRepository.save(sale);
         organizerRepository.save(organizer);
 
@@ -321,14 +438,16 @@ public class TicketSaleService {
         return SaleResponseDTO.fromEntity(sale);
     }
 
-    // 🔥 MÉTODO ADICIONAL: Cancelar venda
     @Transactional
     public SaleResponseDTO cancelSale(String transactionId, String reason) {
         TicketSale sale = ticketSaleRepository.findByTransactionId(transactionId)
                 .orElseThrow(() -> new RuntimeException("Sale not found: " + transactionId));
 
-        // Cancelar venda
-        sale.markAsCancelled();
+        if (!sale.isCancellable()) {
+            throw new RuntimeException("Sale cannot be cancelled in current status: " + sale.getStatus());
+        }
+
+        sale.markAsCancelled(reason);
 
         // Restaurar estoque
         EventTicket ticket = sale.getTicket();
@@ -340,8 +459,8 @@ public class TicketSaleService {
         event.setSoldTickets(event.getSoldTickets() - sale.getQuantity());
         event.setAvailableTickets(event.getAvailableTickets() + sale.getQuantity());
 
-        // Reverter estatísticas financeiras se já estava pago
-        if (SaleStatus.PAID.equals(sale.getStatus())) {
+        // Reverter financeiro se já estava pago
+        if (sale.isPaid()) {
             event.updateFinancialStats(
                     sale.getTotalAmount().negate(),
                     sale.getCommissionAmount().negate(),
@@ -357,7 +476,6 @@ public class TicketSaleService {
             organizerRepository.save(organizer);
         }
 
-        // Salvar alterações
         ticketSaleRepository.save(sale);
         eventTicketRepository.save(ticket);
         eventRepository.save(event);
@@ -365,78 +483,5 @@ public class TicketSaleService {
         log.info("Sale cancelled: {}, Reason: {}", transactionId, reason);
 
         return SaleResponseDTO.fromEntity(sale);
-    }
-
-
-    // 🔥 MÉTODO IMPLEMENTADO: Buscar venda por transactionId
-    @Transactional(readOnly = true)
-    public SaleResponseDTO getSaleByTransactionId(String transactionId) {
-        log.info("Getting sale by transactionId: {}", transactionId);
-        TicketSale sale = ticketSaleRepository.findByTransactionId(transactionId)
-                .orElseThrow(() -> new RuntimeException("Sale not found with transactionId: " + transactionId));
-        return SaleResponseDTO.fromEntity(sale);
-    }
-    
-    // 🔥 MÉTODO IMPLEMENTADO: Buscar vendas por evento
-    @Transactional(readOnly = true)
-    public List<SaleResponseDTO> getSalesByEventId(Long eventId) {
-        log.info("Getting sales for eventId: {}", eventId);
-        List<TicketSale> sales = ticketSaleRepository.findByEventId(eventId);
-        return sales.stream()
-                .map(SaleResponseDTO::fromEntity)
-                .collect(Collectors.toList());
-    }
-
-    // 🔥 MÉTODO IMPLEMENTADO: Buscar vendas por organizador
-    @Transactional(readOnly = true)
-    public List<SaleResponseDTO> getSalesByOrganizerId(Long organizerId) {
-        log.info("Getting sales for organizerId: {}", organizerId);
-        List<TicketSale> sales = ticketSaleRepository.findByOrganizerId(organizerId);
-        return sales.stream()
-                .map(SaleResponseDTO::fromEntity)
-                .collect(Collectors.toList());
-    }
-
-    // 🔥 MÉTODO IMPLEMENTADO: Calcular preço com cupom (sem criar venda)
-    @Transactional(readOnly = true)
-    public Double calculatePriceWithCoupon(Long ticketId, Integer quantity, String couponCode) {
-        log.info("Calculating price for ticket: {}, quantity: {}, couponCode: {}", ticketId, quantity, couponCode);
-
-        // Buscar ticket
-        EventTicket ticket = eventTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new RuntimeException("Ticket not found with id: " + ticketId));
-
-        Event event = ticket.getEvent();
-
-        // Validar disponibilidade e período de vendas (mas não atualizar estoque)
-        validateTicketAvailability(ticket, quantity);
-        validateSalesPeriod(ticket);
-
-        // Calcular preço base
-        BigDecimal unitPrice = ticket.getCurrentPrice();
-        BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(quantity));
-
-        // Aplicar cupom se fornecido
-        BigDecimal discountAmount = BigDecimal.ZERO;
-        if (couponCode != null && !couponCode.trim().isEmpty()) {
-            DiscountCoupon coupon = discountCouponRepository
-                    .findByCodeAndEventId(couponCode, event.getId())
-                    .orElseThrow(() -> new RuntimeException("Coupon not found: " + couponCode));
-
-            if (!coupon.isValid()) {
-                throw new RuntimeException("Coupon is not valid");
-            }
-
-            if (!coupon.canApplyToPurchase(subtotal)) {
-                throw new RuntimeException("Coupon cannot be applied to this purchase amount");
-            }
-
-            discountAmount = coupon.applyDiscount(subtotal);
-        }
-
-        BigDecimal totalAmount = subtotal.subtract(discountAmount);
-
-        // Retornar o valor final (como Double, se for o caso)
-        return totalAmount.doubleValue();
     }
 }

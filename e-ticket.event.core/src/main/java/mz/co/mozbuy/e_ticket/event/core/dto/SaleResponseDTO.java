@@ -1,70 +1,68 @@
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import mz.co.mozbuy.e_ticket.event.core.dto.calculateDto.PriceBreakdownItemDTO;
+import mz.co.mozbuy.e_ticket.event.core.enums.SaleStatus;
 import mz.co.mozbuy.e_ticket.event.core.model.TicketSale;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SaleResponseDTO {
-
     private Long id;
     private String transactionId;
     private Long eventId;
     private String eventName;
     private Long ticketId;
     private String ticketName;
-    private Long organizerId;
-    private String organizerName;
     private Integer quantity;
     private BigDecimal unitPrice;
     private BigDecimal subtotal;
     private BigDecimal discountAmount;
     private BigDecimal totalAmount;
-    private BigDecimal commissionRate;
     private BigDecimal commissionAmount;
     private BigDecimal organizerPayout;
-    private String couponCode;
     private String buyerEmail;
     private String buyerName;
-    private String status;
-    private String paymentMethod;
-    private Boolean isTrialEvent;
-
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime saleDate;
-
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
+    private SaleStatus status;
     private LocalDateTime createdAt;
 
+    // 🔥 NOVOS CAMPOS
+    private List<PriceBreakdownItemDTO> appliedStrategies;
+    private BigDecimal totalDiscountFromStrategies;
+
     public static SaleResponseDTO fromEntity(TicketSale sale) {
-        SaleResponseDTO dto = new SaleResponseDTO();
-        dto.setId(sale.getId());
-        dto.setTransactionId(sale.getTransactionId());
-        dto.setEventId(sale.getEvent().getId());
-        dto.setEventName(sale.getEvent().getName());
-        dto.setTicketId(sale.getTicket().getId());
-        dto.setTicketName(sale.getTicket().getTicketName());
-        dto.setOrganizerId(sale.getOrganizer().getId());
-        dto.setOrganizerName(sale.getOrganizer().getName());
-        dto.setQuantity(sale.getQuantity());
-        dto.setUnitPrice(sale.getUnitPrice());
-        dto.setSubtotal(sale.getSubtotal());
-        dto.setDiscountAmount(sale.getDiscountAmount());
-        dto.setTotalAmount(sale.getTotalAmount());
-        dto.setCommissionRate(sale.getCommissionRate());
-        dto.setCommissionAmount(sale.getCommissionAmount());
-        dto.setOrganizerPayout(sale.getOrganizerPayout());
-        dto.setCouponCode(sale.getDiscountCoupon() != null ? sale.getDiscountCoupon().getCode() : null);
-        dto.setBuyerEmail(sale.getBuyerEmail());
-        dto.setBuyerName(sale.getBuyerName());
-        dto.setStatus(sale.getStatus().name());
-        dto.setPaymentMethod(sale.getPaymentMethod());
-        dto.setIsTrialEvent(sale.getIsTrialEvent());
-        dto.setSaleDate(sale.getCreatedAt());
-        dto.setCreatedAt(sale.getCreatedAt());
+        SaleResponseDTO dto = SaleResponseDTO.builder()
+                .id(sale.getId())
+                .transactionId(sale.getTransactionId())
+                .eventId(sale.getEvent() != null ? sale.getEvent().getId() : null)
+                .eventName(sale.getEvent() != null ? sale.getEvent().getName() : null)
+                .ticketId(sale.getTicket() != null ? sale.getTicket().getId() : null)
+                .ticketName(sale.getTicket() != null ? sale.getTicket().getTicketName() : null)
+                .quantity(sale.getQuantity())
+                .unitPrice(sale.getTicket().getOriginalPrice())
+                .subtotal(sale.getSubtotal())
+                .discountAmount(sale.getDiscountAmount())
+                .totalAmount(sale.getTotalAmount())
+                .commissionAmount(sale.getCommissionAmount())
+                .organizerPayout(sale.getOrganizerPayout())
+                .buyerEmail(sale.getBuyerEmail())
+                .buyerName(sale.getBuyerName())
+                .status(sale.getStatus())
+                .createdAt(sale.getCreatedAt())
+                // 🔥 NOVOS CAMPOS
+                .appliedStrategies(sale.getAppliedStrategies())
+                .totalDiscountFromStrategies(sale.getTotalDiscountFromStrategies())
+                .build();
+
         return dto;
     }
 }

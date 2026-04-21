@@ -43,7 +43,8 @@ public class TicketRequestDTO {
     @NotNull(message = "strategyId is required")
     private Long strategyId; // ID da estratégia que causou a mudança
 
-    @NotBlank(message = "Total price is required")
+    @NotNull(message = "Total price is required")
+    @Positive(message = "Price must be greater than zero")
     private BigDecimal price;
 
     private String description;

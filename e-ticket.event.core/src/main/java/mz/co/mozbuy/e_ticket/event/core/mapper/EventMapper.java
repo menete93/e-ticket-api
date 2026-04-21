@@ -11,11 +11,12 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+
 @Component
 @RequiredArgsConstructor
 public class EventMapper {
 
-    private final SafeEventTicketMapper safeEventTicketMapper;  // ← Use o seguro
+    private final SafeEventTicketMapper safeEventTicketMapper;
 
     public EventResponseDTO toDTO(Event event) {
         EventResponseDTO dto = new EventResponseDTO();
@@ -34,7 +35,7 @@ public class EventMapper {
         dto.setMaxAttendees(event.getMaxAttendees());
         dto.setMinAttendees(event.getMinAttendees());
         dto.setIsPublic(event.getIsPublic());
-       dto.setIsFeatured(event.getIsFeatured());
+        dto.setIsFeatured(event.getIsFeatured());
         dto.setIsFree(event.getIsFree());
         dto.setRegistrationDeadline(event.getRegistrationDeadline());
         dto.setTotalTickets(event.getTotalTickets());
@@ -45,8 +46,10 @@ public class EventMapper {
         dto.setUpdatedAt(event.getUpdatedAt());
         dto.setCreatedBy(event.getCreatedBy());
         dto.setUpdatedBy(event.getUpdatedBy());
-
-        // ... outros campos
+        dto.setIsCancelled(event.getIsCancelled());
+        dto.setCancelledAt(event.getCancelledAt());
+        dto.setCancelReason(event.getCancelReason());
+        dto.setRefundProcessed(event.getRefundProcessed());
 
         // Tickets com tratamento robusto
         dto.setTickets(extractTicketsSafely(event));

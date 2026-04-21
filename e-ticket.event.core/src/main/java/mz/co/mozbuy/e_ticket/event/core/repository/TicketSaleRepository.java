@@ -57,4 +57,14 @@ public interface TicketSaleRepository extends JpaRepository<TicketSale, Long> {
 
     @Query("SELECT COUNT(s) FROM TicketSale s WHERE s.isTrialEvent = true")
     long countTrialEventSales();
+
+    // Contar compras por email do comprador
+    long countByBuyerEmail(String buyerEmail);
+
+    // Buscar compras por email e status
+    List<TicketSale> findByBuyerEmailAndStatus(String buyerEmail, String status);
+
+    // Somar total gasto por email
+    @Query("SELECT COALESCE(SUM(ts.totalAmount), 0) FROM TicketSale ts WHERE ts.buyerEmail = :email AND ts.status = 'PAID'")
+    BigDecimal sumTotalAmountByBuyerEmailAndStatus(@Param("email") String email);
 }

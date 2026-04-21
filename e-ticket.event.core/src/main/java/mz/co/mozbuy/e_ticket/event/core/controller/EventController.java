@@ -3,8 +3,8 @@ package mz.co.mozbuy.e_ticket.event.core.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import mz.co.mozbuy.e_ticket.event.core.dto.EventRequestDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.EventResponseDTO;
+import mz.co.mozbuy.common.audit.LifeCycleState;
+import mz.co.mozbuy.e_ticket.event.core.dto.*;
 import mz.co.mozbuy.e_ticket.event.core.model.Event;
 import mz.co.mozbuy.e_ticket.event.core.repository.EventRepository;
 import mz.co.mozbuy.e_ticket.event.core.service.EventService;
@@ -41,7 +41,7 @@ public class EventController {
     @PutMapping("/{eventId}")
     public ResponseEntity<EventResponseDTO> updateEvent(
             @PathVariable("eventId") Long eventId,
-            @Valid @RequestBody EventRequestDTO eventDTO
+            @Valid @RequestBody EventUpdateDTO eventDTO
          ) {
 
         EventResponseDTO updatedEvent = eventService.updateEvent(eventId, eventDTO);
@@ -63,5 +63,24 @@ public class EventController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/findBy/organizer/{referenceId}")
+    public ResponseEntity<List<EventResponseDTO>> getActiveEventsByOrganizer(
+            @PathVariable("referenceId") String referenceId) {
 
+        List<EventResponseDTO> events = eventService.findByStateAndOrganizerId(referenceId);
+        return ResponseEntity.ok(events);
+    }
+
+    @PatchMapping("/{eventId}/cancel")
+    public ResponseEntity<EventResponseDTO> cancelEvent(
+            @PathVariable("eventId") Long eventId,
+            @RequestBody(required = false) CancelEventRequestDTO cancelRequest) {
+
+        if (cancelRequest == null) {
+            cancelRequest = new CancelEventRequestDTO();
+        }
+
+        EventResponseDTO cancelledEvent = eventService.cancelEvent(eventId, cancelRequest);
+        return ResponseEntity.ok(cancelledEvent);
+    }
 }

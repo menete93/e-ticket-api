@@ -49,6 +49,13 @@ public class EventResponseDTO {
     private LocalDateTime updatedAt;
     private String createdBy;
     private String updatedBy;
+    private Boolean isCancelled;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime cancelledAt;
+
+    private String cancelReason;
+    private Boolean refundProcessed;
 
     // Métodos auxiliares
     public boolean hasAvailableTickets() {

@@ -143,6 +143,43 @@ public class Event extends AuditableEntity<Long, String> {
     @JsonIgnore
     private List<TicketSale> sales = new ArrayList<>();
 
+
+    // ==================== CAMPOS DE CANCELAMENTO ====================
+
+    @Column(name = "is_cancelled")
+    private Boolean isCancelled = false;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancel_reason", length = 500)
+    private String cancelReason;
+
+    @Column(name = "refund_processed")
+    private Boolean refundProcessed = false;
+
+    // ... resto do código ...
+    // Adicione estes métodos na seção de métodos existentes
+
+    public boolean isCancellable() {
+        // Não pode cancelar se:
+        // 1. Já foi cancelado
+        // 2. Já ocorreu
+        return !Boolean.TRUE.equals(this.isCancelled) &&
+                (this.eventDate == null || this.eventDate.isAfter(LocalDateTime.now()));
+    }
+
+    public String getCancellationStatus() {
+        if (Boolean.TRUE.equals(this.isCancelled)) {
+            return "CANCELLED";
+        }
+        if (this.eventDate != null && this.eventDate.isBefore(LocalDateTime.now())) {
+            return "COMPLETED";
+        }
+        return "ACTIVE";
+    }
+
     // 🔥🔥🔥 CONSTRUTORES 🔥🔥🔥
 
     public Event() {}
