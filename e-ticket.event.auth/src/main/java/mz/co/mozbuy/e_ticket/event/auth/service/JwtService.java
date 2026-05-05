@@ -55,7 +55,7 @@ public class JwtService {
         claims.put("userId", user.getId());
         claims.put("firstName", user.getFirstName());
         claims.put("lastName", user.getLastName());
-        claims.put("lifecyclestate", user.getLifeCycleState());
+        claims.put("state", user.getState());
         claims.put("isOrganizer", user.getIsOrganizer());
 
         // Se for organizador, podemos adicionar um objeto organizer com mais dados, se disponíveis.

@@ -145,7 +145,7 @@ public class PricingStrategy extends AuditableEntity<Long, String> {
      * Verifica se a estratégia é aplicável no momento atual
      */
     public boolean isCurrentlyApplicable() {
-        if (!this.getLifeCycleState().equals(LifeCycleState.ACTIVE)) return false;
+        if (!this.getState().equals(LifeCycleState.ACTIVE)) return false;
 
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime eventDate = event.getEventDate();

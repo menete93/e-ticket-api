@@ -276,7 +276,7 @@ public class TicketService {
         ticket.setOriginalPrice(price);
 
         ticket.setDescription(description);
-        ticket.setLifeCycleState(LifeCycleState.ACTIVE);
+        ticket.setState(LifeCycleState.ACTIVE);
 
         // Definir período de vendas para Early Bird
         if (category == TicketCategory.EARLY_BIRD) {
@@ -305,7 +305,7 @@ public class TicketService {
         dto.setSalesStartDate(ticket.getSalesStartDate());
         dto.setSalesEndDate(ticket.getSalesEndDate());
         dto.setMaxTicketsPerUser(ticket.getMaxTicketsPerUser());
-        dto.setLifeCycleState(ticket.getLifeCycleState());
+        dto.setLifeCycleState(ticket.getState());
         dto.setIsAvailable(ticket.isAvailable());
         dto.setIsSalesPeriodActive(ticket.isSalesPeriodActive());
         dto.setTotalRevenue(ticket.getTotalRevenue());

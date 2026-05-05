@@ -83,7 +83,7 @@ public class EventTicket extends AuditableEntity<Long, String> {
     private List<TicketPriceHistory> priceHistory = new ArrayList<>();
 
     public boolean isAvailable() {
-        return this.getLifeCycleState().equals(LifeCycleState.ACTIVE) && availableQuantity > 0 && isSalesPeriodActive();
+        return this.getState().equals(LifeCycleState.ACTIVE) && availableQuantity > 0 && isSalesPeriodActive();
     }
 
     public boolean isSalesPeriodActive() {

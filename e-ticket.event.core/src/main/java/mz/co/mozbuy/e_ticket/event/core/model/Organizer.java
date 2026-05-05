@@ -105,35 +105,35 @@ public class Organizer extends AuditableEntity<Long, String> {
      * Verifica se organizador está ATIVO
      */
     public boolean isActive() {
-        return LifeCycleState.ACTIVE.equals(this.getLifeCycleState());
+        return LifeCycleState.ACTIVE.equals(this.getState());
     }
 
     /**
      * Verifica se organizador está INATIVO
      */
     public boolean isInactive() {
-        return LifeCycleState.INACTIVE.equals(this.getLifeCycleState());
+        return LifeCycleState.INACTIVE.equals(this.getState());
     }
 
     /**
      * Verifica se organizador está BLOQUEADO
      */
     public boolean isBlocked() {
-        return LifeCycleState.BLOCKED.equals(this.getLifeCycleState());
+        return LifeCycleState.BLOCKED.equals(this.getState());
     }
 
     /**
      * Verifica se organizador está BANIDO
      */
     public boolean isBanned() {
-        return LifeCycleState.BANNED.equals(this.getLifeCycleState());
+        return LifeCycleState.BANNED.equals(this.getState());
     }
 
     /**
      * Verifica se organizador está DELETADO
      */
     public boolean isDeleted() {
-        return LifeCycleState.DELETED.equals(this.getLifeCycleState());
+        return LifeCycleState.DELETED.equals(this.getState());
     }
 
     /**
@@ -141,7 +141,7 @@ public class Organizer extends AuditableEntity<Long, String> {
      * (ativo e não bloqueado/banido)
      */
     public boolean canOperate() {
-        LifeCycleState state = this.getLifeCycleState();
+        LifeCycleState state = this.getState();
         return LifeCycleState.ACTIVE.equals(state) || LifeCycleState.INACTIVE.equals(state);
     }
 
@@ -164,30 +164,30 @@ public class Organizer extends AuditableEntity<Long, String> {
     // ============================================
 
     public void activate() {
-        this.setLifeCycleState(LifeCycleState.ACTIVE);
+        this.setState(LifeCycleState.ACTIVE);
     }
 
     public void deactivate() {
-        this.setLifeCycleState(LifeCycleState.INACTIVE);
+        this.setState(LifeCycleState.INACTIVE);
     }
 
     public void block() {
-        this.setLifeCycleState(LifeCycleState.BLOCKED);
+        this.setState(LifeCycleState.BLOCKED);
     }
 
     public void unblock() {
         // Só pode desbloquear para ACTIVE ou INACTIVE
         if (isBlocked()) {
-            this.setLifeCycleState(LifeCycleState.ACTIVE);
+            this.setState(LifeCycleState.ACTIVE);
         }
     }
 
     public void ban() {
-        this.setLifeCycleState(LifeCycleState.BANNED);
+        this.setState(LifeCycleState.BANNED);
     }
 
     public void markAsDeleted() {
-        this.setLifeCycleState(LifeCycleState.DELETED);
+        this.setState(LifeCycleState.DELETED);
     }
 
     // ============================================
@@ -311,7 +311,7 @@ public class Organizer extends AuditableEntity<Long, String> {
     // ============================================
 
     public String getStatusInfo() {
-        LifeCycleState state = this.getLifeCycleState();
+        LifeCycleState state = this.getState();
         String statusEmoji = "❓";
         String statusText = "DESCONHECIDO";
 

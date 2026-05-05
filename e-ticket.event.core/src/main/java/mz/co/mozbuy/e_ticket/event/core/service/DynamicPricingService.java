@@ -98,7 +98,7 @@ public class DynamicPricingService {
         int appliedCount = 0;
 
         for (EventTicket ticket : tickets) {
-            if (ticket.getLifeCycleState().equals(LifeCycleState.ACTIVE) && ticket.isSalesPeriodActive()) {
+            if (ticket.getState().equals(LifeCycleState.ACTIVE) && ticket.isSalesPeriodActive()) {
                 BigDecimal newPrice = calculatePrice(ticket, strategy);
 
                 if (!newPrice.equals(ticket.getCurrentPrice())) {
@@ -529,7 +529,7 @@ public class DynamicPricingService {
                 .orElseThrow(() -> new RuntimeException("Ticket not found"));
 
         PricingStrategy topStrategy = pricingStrategyRepository
-                .findTopByEventIdAndLifeCycleStateOrderByPriorityDesc(ticket.getEvent().getId(),LifeCycleState.ACTIVE)
+                .findTopByEventIdAndStateOrderByPriorityDesc(ticket.getEvent().getId(),LifeCycleState.ACTIVE)
                 .orElse(null);
 
         if (topStrategy == null) {

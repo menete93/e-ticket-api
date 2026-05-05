@@ -44,7 +44,7 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
 
     List<Event> findByCreatedBy(String createdBy);
 
-    @Query("SELECT e FROM Event e WHERE e.createdBy = :username AND e.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    @Query("SELECT e FROM Event e WHERE e.createdBy = :username AND e.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
     List<Event> findActiveEventsByUser(@Param("username") String username);
 
         @Lock(LockModeType.PESSIMISTIC_WRITE) // Evita concorrência
@@ -52,17 +52,17 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
         Optional<Event> findByIdWithLock(@Param("id") Long id);
 
     // TESTE 1: Query Nativa DIRETA (deve funcionar)
-    @Query(value = "SELECT * FROM e_ticket.events WHERE life_cycle_state = 'ACTIVE'",
+    @Query(value = "SELECT * FROM e_ticket.events WHERE state = 'ACTIVE'",
             nativeQuery = true)
     List<Event> findActiveNative();
 
     // TESTE 2: Query Nativa com CAST (para garantir)
-    @Query(value = "SELECT * FROM e_ticket.events WHERE life_cycle_state::TEXT = 'ACTIVE'",
+    @Query(value = "SELECT * FROM e_ticket.events WHERE state::TEXT = 'ACTIVE'",
             nativeQuery = true)
     List<Event> findActiveNativeCast();
 
     // TESTE 3: Método derivado SIMPLES
-    List<Event> findByLifeCycleState(LifeCycleState lifeCycleState);
+    List<Event> findByState(LifeCycleState lifeCycleState);
 
 //    @Query("SELECT DISTINCT e FROM Event e LEFT JOIN FETCH e.tickets WHERE e.lifeCycleState = 'ACTIVE'")
 //    List<Event> findActiveEventsWithTickets();
@@ -76,11 +76,11 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
             e.id,
             e.name,
             e.description,
-            e.lifeCycleState,
+            e.state,
             e.eventDate
         )
         FROM Event e 
-        WHERE e.lifeCycleState = 'ACTIVE'
+        WHERE e.state = 'ACTIVE'
         """)
     List<EventSimpleDTO> findActiveEventsSimple();
 
@@ -93,7 +93,7 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
             t.currentPrice as ticketPrice
         FROM Event e 
         LEFT JOIN e.tickets t
-        WHERE e.lifeCycleState = 'ACTIVE'
+        WHERE e.state = 'ACTIVE'
         """)
     List<EventWithTicketsProjection> findActiveEventsWithTickets();
 
@@ -114,14 +114,14 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
 
     @Query("SELECT e FROM Event e " +
             "LEFT JOIN FETCH e.tickets " +
-            "WHERE e.lifeCycleState = :state")
+            "WHERE e.state = :state")
     List<Event> findByStateWithTickets(@Param("state") LifeCycleState state);
 
 
     @Query("""
     SELECT e FROM Event e
     LEFT JOIN FETCH e.tickets
-    WHERE e.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE
+    WHERE e.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE
       AND e.organizer.referenceId = :referenceId
 """)
     List<Event> findActiveEventsByOrganizerWithTickets(@Param("referenceId") String referenceId);

@@ -58,7 +58,7 @@ public class DiscountCoupon extends AuditableEntity<Long, String> {
     // Métodos de negócio
     public boolean isValid() {
 
-        if(this.getLifeCycleState() != LifeCycleState.ACTIVE){
+        if(this.getState() != LifeCycleState.ACTIVE){
             return false;
 
         }

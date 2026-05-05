@@ -109,7 +109,7 @@ public class PricingStrategyController {
 
     @GetMapping("/event/{eventId}")
     public ResponseEntity<List<PricingStrategyResponseDTO>> getStrategiesByEvent(
-            @PathVariable Long eventId) {
+            @PathVariable ("eventId") Long eventId) {
         List<PricingStrategyResponseDTO> strategies = strategyService.getStrategiesByEvent(eventId);
         return ResponseEntity.ok(strategies);
     }

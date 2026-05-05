@@ -21,7 +21,7 @@ public class UserContext {
     private String lastName;
     private Boolean isOrganizer;
     private String referenceId; // UUID do perfil no Ticket Service
-    private LifeCycleState lifecycleStatus;
+    private LifeCycleState state;
     private List<String> roles;
     private List<String> authorities;
 //    private List<String> session;

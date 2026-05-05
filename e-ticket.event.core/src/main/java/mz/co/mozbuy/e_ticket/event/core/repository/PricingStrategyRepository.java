@@ -19,13 +19,13 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     // ==================== MÉTODOS BÁSICOS ====================
 
     // Buscar estratégias ativas de um evento
-    List<PricingStrategy> findByEventIdAndLifeCycleStateAfterOrderByPriorityDesc(Long eventId,LifeCycleState lifeCycleState);
+    List<PricingStrategy> findByEventIdAndStateOrderByPriorityDesc(Long eventId,LifeCycleState  lifeCycleState);
 
     // Buscar estratégias ativas com auto-apply
-    List<PricingStrategy> findByEventIdAndLifeCycleStateTrueAndAutoApplyTrueOrderByPriorityDesc(Long eventId);
+    List<PricingStrategy> findByEventIdAndStateTrueAndAutoApplyTrueOrderByPriorityDesc(Long eventId);
 
     // Buscar todas estratégias ativas com auto-apply (para scheduler)
-    @Query("SELECT ps FROM PricingStrategy ps WHERE ps.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND ps.autoApply = true")
+    @Query("SELECT ps FROM PricingStrategy ps WHERE ps.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND ps.autoApply = true")
     List<PricingStrategy> findActiveAndAutoApplied();
 
     // Buscar por tipo
@@ -37,22 +37,22 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     // ==================== MÉTODOS DE PRIORIDADE ====================
 
     // 🔥 MÉTODO QUE VOCÊ PRECISA: Buscar estratégia de maior prioridade
-//    Optional<PricingStrategy> findTopByEventIdAndLifeCycleStateTrueOrderByPriorityDesc(Long eventId);
+//    Optional<PricingStrategy> findTopByEventIdAndStateTrueOrderByPriorityDesc(Long eventId);
 
-    Optional<PricingStrategy> findTopByEventIdAndLifeCycleStateOrderByPriorityDesc(Long eventId, LifeCycleState lifecycle);
+    Optional<PricingStrategy> findTopByEventIdAndStateOrderByPriorityDesc(Long eventId, LifeCycleState lifecycle);
 
     // Versão alternativa com Query
-    @Query("SELECT ps FROM PricingStrategy ps WHERE ps.event.id = :eventId AND ps.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE ORDER BY ps.priority DESC")
+    @Query("SELECT ps FROM PricingStrategy ps WHERE ps.event.id = :eventId AND ps.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE ORDER BY ps.priority DESC")
     List<PricingStrategy> findAllByEventIdOrderByPriority(@Param("eventId") Long eventId);
 
     // Buscar top 3 estratégias
-    List<PricingStrategy> findTop3ByEventIdAndLifeCycleStateTrueOrderByPriorityDesc(Long eventId);
+    List<PricingStrategy> findTop3ByEventIdAndStateTrueOrderByPriorityDesc(Long eventId);
 
     // ==================== MÉTODOS TEMPORAIS ====================
 
     // Buscar estratégias aplicáveis agora (baseado em datas)
     @Query("SELECT ps FROM PricingStrategy ps WHERE ps.event.id = :eventId " +
-            "AND ps.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
+            "AND ps.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
             "AND ((ps.customStartDate <= :now AND ps.customEndDate >= :now) " +
             "OR (ps.daysBeforeEventStart IS NOT NULL AND ps.daysBeforeEventEnd IS NOT NULL))")
     List<PricingStrategy> findCurrentlyApplicableStrategies(
@@ -61,7 +61,7 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     );
 
     // Buscar estratégias por período
-    List<PricingStrategy> findByCustomStartDateBeforeAndCustomEndDateAfterAndLifeCycleStateTrue(
+    List<PricingStrategy> findByCustomStartDateBeforeAndCustomEndDateAfterAndStateTrue(
             LocalDateTime start, LocalDateTime end);
 
     // ==================== MÉTODOS DE CATEGORIA ====================
@@ -70,7 +70,7 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     @Query("SELECT ps FROM PricingStrategy ps " +
             "WHERE ps.event.id = :eventId " +
             "AND (ps.specificCategory = :category OR ps.specificCategory IS NULL) " +
-            "AND ps.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
+            "AND ps.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
             "ORDER BY ps.priority DESC")
     List<PricingStrategy> findStrategiesForCategory(
             @Param("eventId") Long eventId,
@@ -82,7 +82,7 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     // Buscar estratégias que atingiram threshold de vendas
     @Query("SELECT ps FROM PricingStrategy ps " +
             "WHERE ps.event.id = :eventId " +
-            "AND ps.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
+            "AND ps.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
             "AND ps.salesThreshold IS NOT NULL " +
             "AND ps.salesThreshold <= :soldPercentage")
     List<PricingStrategy> findStrategiesBySalesThreshold(
@@ -93,23 +93,23 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     // Buscar estratégias baseadas em disponibilidade
     @Query("SELECT ps FROM PricingStrategy ps " +
             "WHERE ps.event.id = :eventId " +
-            "AND ps.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
+            "AND ps.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
             "AND ps.availableTicketsThreshold IS NOT NULL")
     List<PricingStrategy> findStrategiesWithAvailabilityThreshold(@Param("eventId") Long eventId);
 
     // ==================== MÉTODOS DE FIDELIDADE ====================
 
     // Buscar estratégias de fidelidade por tier
-    List<PricingStrategy> findByEventIdAndLoyaltyTierAndLifeCycleStateTrue(Long eventId, String tier);
+    List<PricingStrategy> findByEventIdAndLoyaltyTierAndStateTrue(Long eventId, String tier);
 
     // Buscar estratégias para primeira compra
-    List<PricingStrategy> findByEventIdAndFirstTimeBuyerOnlyTrueAndLifeCycleStateTrue(Long eventId);
+    List<PricingStrategy> findByEventIdAndFirstTimeBuyerOnlyTrueAndStateTrue(Long eventId);
 
     // Buscar estratégias para clientes recorrentes
-    List<PricingStrategy> findByEventIdAndRepeatBuyerOnlyTrueAndLifeCycleStateTrue(Long eventId);
+    List<PricingStrategy> findByEventIdAndRepeatBuyerOnlyTrueAndStateTrue(Long eventId);
 
     // Buscar estratégias baseadas em volume
-    List<PricingStrategy> findByEventIdAndMinPurchasesIsNotNullAndLifeCycleStateTrue(Long eventId);
+    List<PricingStrategy> findByEventIdAndMinPurchasesIsNotNullAndStateTrue(Long eventId);
 
     // ==================== MÉTODOS DE ESTATÍSTICA ====================
 
@@ -137,7 +137,7 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     // Buscar por múltiplos critérios
     @Query("SELECT ps FROM PricingStrategy ps WHERE ps.event.id = :eventId " +
             "AND (:type IS NULL OR ps.strategyType = :type) " +
-            "AND (:active IS NULL OR ps.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE) " +
+            "AND (:active IS NULL OR ps.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE) " +
             "AND (:autoApply IS NULL OR ps.autoApply = :autoApply)")
     List<PricingStrategy> findByFilters(
             @Param("eventId") Long eventId,
@@ -147,5 +147,5 @@ public interface PricingStrategyRepository extends JpaRepository<PricingStrategy
     );
 
     // Contar estratégias ativas por evento
-    long countByEventIdAndLifeCycleStateTrue(Long eventId);
+    long countByEventIdAndStateTrue(Long eventId);
 }

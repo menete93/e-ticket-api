@@ -24,35 +24,35 @@ public interface EventTicketRepository extends JpaRepository<EventTicket, Long>,
     @Query("SELECT t FROM EventTicket t " +
             "WHERE t.event.id = :eventId " +
             "AND t.category = :category " +
-            "AND t.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
-            "AND t.event.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+            "AND t.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
+            "AND t.event.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
     Optional<EventTicket> findActiveTicketsByEventIdAndCategory(@Param("eventId") Long eventId,
                                                                 @Param("category") TicketCategory category);
 
-    @Query("SELECT t FROM EventTicket t WHERE t.event.id = :eventId AND t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.availableQuantity > 0")
+    @Query("SELECT t FROM EventTicket t WHERE t.event.id = :eventId AND t.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.availableQuantity > 0")
     List<EventTicket> findAvailableTicketsByEventId(@Param("eventId") Long eventId);
 
-    @Query("SELECT t FROM EventTicket t WHERE t.event.id = :eventId AND t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.hasDynamicPricing = true")
+    @Query("SELECT t FROM EventTicket t WHERE t.event.id = :eventId AND t.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.hasDynamicPricing = true")
     List<EventTicket> findTicketsWithDynamicPricingByEventId(@Param("eventId") Long eventId);
 
-    @Query("SELECT SUM(t.availableQuantity) FROM EventTicket t WHERE t.event.id = :eventId AND t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    @Query("SELECT SUM(t.availableQuantity) FROM EventTicket t WHERE t.event.id = :eventId AND t.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
     Integer sumAvailableTicketsByEventId(@Param("eventId") Long eventId);
 
-    @Query("SELECT SUM(t.soldQuantity) FROM EventTicket t WHERE t.event.id = :eventId AND t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    @Query("SELECT SUM(t.soldQuantity) FROM EventTicket t WHERE t.event.id = :eventId AND t.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
     Integer sumSoldTicketsByEventId(@Param("eventId") Long eventId);
 
-    @Query("SELECT t FROM EventTicket t WHERE t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.hasDynamicPricing = true")
+    @Query("SELECT t FROM EventTicket t WHERE t.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.hasDynamicPricing = true")
     List<EventTicket> findAllTicketsWithDynamicPricing();
 
-    @Query("SELECT t FROM EventTicket t WHERE t.event.id = :eventId AND t.category = :category AND t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.availableQuantity > 0")
+    @Query("SELECT t FROM EventTicket t WHERE t.event.id = :eventId AND t.category = :category AND t.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND t.availableQuantity > 0")
     Optional<EventTicket> findAvailableTicketByEventAndCategory(@Param("eventId") Long eventId, @Param("category") TicketCategory category);
 
     @Query("SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END " +
             "FROM EventTicket t " +
             "WHERE t.event.id = :eventId " +
             "AND t.category = :category " +
-            "AND t.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
-            "AND t.event.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+            "AND t.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
+            "AND t.event.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
     boolean existsActiveTicketsByEventIdAndCategory(@Param("eventId") Long eventId,
                                                     @Param("category") TicketCategory category);
 

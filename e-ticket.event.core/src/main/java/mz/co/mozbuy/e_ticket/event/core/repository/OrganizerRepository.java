@@ -19,7 +19,7 @@ public interface OrganizerRepository extends JpaRepository<Organizer, Long> {
 
     Optional<Organizer> findByName(String name);
 
-    List<Organizer> findByLifeCycleState(LifeCycleState lifeCycleState);
+    List<Organizer> findByState(LifeCycleState lifeCycleState);
 
     @Query("SELECT o FROM Organizer o WHERE o.totalEarnings >= :minEarnings")
     List<Organizer> findTopEarners(@Param("minEarnings") BigDecimal minEarnings);

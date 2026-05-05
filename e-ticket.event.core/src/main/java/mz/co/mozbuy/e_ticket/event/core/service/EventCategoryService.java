@@ -27,7 +27,7 @@ public class EventCategoryService {
      * Encontra todas as categorias ativas
      */
     public List<EventCategoryDTO> findAllActive() {
-        return eventCategoryRepository.findByLifeCycleState(LifeCycleState.ACTIVE)
+        return eventCategoryRepository.findByState(LifeCycleState.ACTIVE)
                 .stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());

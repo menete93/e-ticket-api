@@ -453,3 +453,35 @@ ALTER TABLE scheduled_price_changes COMMENT = 'Mudanças de preço agendadas';
 ALTER TABLE ticket_price_history COMMENT = 'Histórico de alterações de preço';
 ALTER TABLE ticket_reservations COMMENT = 'Reservas de bilhetes';
 ALTER TABLE ticket_sales COMMENT = 'Vendas de bilhetes confirmadas';
+
+
+
+
+---------------------------------CONSTRAINT PARA VERIFICAR STATE------------------
+
+DO $$
+DECLARE r RECORD;
+BEGIN
+FOR r IN
+SELECT table_name
+FROM information_schema.columns
+WHERE column_name = 'state'
+  AND table_schema = 'e_ticket'
+    LOOP
+        -- remove se existir constraint antiga (evita erro)
+        EXECUTE format(
+            'ALTER TABLE e_ticket.%I DROP CONSTRAINT IF EXISTS chk_%I_state',
+            r.table_name,
+            r.table_name
+        );
+
+-- recria constraint nova
+EXECUTE format(
+        'ALTER TABLE e_ticket.%I
+         ADD CONSTRAINT chk_%I_state
+         CHECK (state IN (''ACTIVE'',''INACTIVE'',''DELETED'',''BLOCKED'',''BANNED''))',
+        r.table_name,
+        r.table_name
+        );
+END LOOP;
+END $$;

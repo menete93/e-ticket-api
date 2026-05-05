@@ -57,7 +57,7 @@ public class EventService {
         if (!organizer.canCreateEvents()) {
             throw new OrganizerNotAllowedException(
                     "Organizer %s cannot create events. Status: %s",
-                            organizer.getName(),"status"+ organizer.getLifeCycleState().getDbValue());
+                            organizer.getName(),"status"+ organizer.getState().getCode());
 
         }
 
@@ -308,7 +308,7 @@ public class EventService {
         System.out.println("=== BUSCANDO EVENTOS ATIVOS ===");
 
         // Use o método COM JOIN FETCH para carregar tickets
-        List<Event> events = eventRepository.findByLifeCycleState(LifeCycleState.ACTIVE);
+        List<Event> events = eventRepository.findByState(LifeCycleState.ACTIVE);
         System.out.println("Eventos encontrados com tickets: " + events.size());
 
         if (!events.isEmpty()) {

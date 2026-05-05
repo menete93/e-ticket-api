@@ -107,7 +107,7 @@ public class TicketPricingService {
 
         // Buscar estratégias ativas para o evento
         List<PricingStrategy> strategies = strategyRepository
-                .findByEventIdAndLifeCycleStateAfterOrderByPriorityDesc(
+                .findByEventIdAndStateOrderByPriorityDesc(
                         request.getEventId(),
                         LifeCycleState.ACTIVE
                 );
@@ -276,7 +276,7 @@ public class TicketPricingService {
      * Verifica se a estratégia está ativa
      */
     private boolean isStrategyActive(PricingStrategy strategy) {
-        return strategy.getLifeCycleState() == LifeCycleState.ACTIVE;
+        return strategy.getState() == LifeCycleState.ACTIVE;
     }
 
     /**

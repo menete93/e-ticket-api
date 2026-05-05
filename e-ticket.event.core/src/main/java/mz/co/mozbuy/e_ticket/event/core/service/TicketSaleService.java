@@ -247,7 +247,7 @@ public class TicketSaleService {
      * Valida ticket para venda
      */
     private void validateTicketForSale(EventTicket ticket, Integer requestedQuantity) {
-        if (!ticket.getLifeCycleState().equals(LifeCycleState.ACTIVE)) {
+        if (!ticket.getState().equals(LifeCycleState.ACTIVE)) {
             throw new TicketNotActiveException();
         }
 

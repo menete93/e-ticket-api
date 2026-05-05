@@ -60,7 +60,7 @@ public class AuthController {
                 .email(authenticatedUser.getEmail())
                 .firstName(authenticatedUser.getFirstName())
                 .lastName(authenticatedUser.getLastName())
-                .lifecycleStatus(authenticatedUser.getLifeCycleState())
+                .state(authenticatedUser.getState())
                 .isOrganizer(authenticatedUser.getIsOrganizer())
                 .referenceId(authenticatedUser.getOrganizerReferenceId())
                 .roles(roleNames)         // lista de roles

@@ -126,7 +126,7 @@ public class PricingStrategyService {
         PricingStrategy strategy = strategyRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Strategy not found"));
 
-        strategy.setLifeCycleState(LifeCycleState.DELETED); // Soft delete
+        strategy.setState(LifeCycleState.DELETED); // Soft delete
         strategyRepository.save(strategy);
         log.info("Deactivated pricing strategy: {}", strategy.getStrategyName());
     }
@@ -140,10 +140,14 @@ public class PricingStrategyService {
 
     @Transactional(readOnly = true)
     public List<PricingStrategyResponseDTO> getStrategiesByEvent(Long eventId) {
-        return strategyRepository.findByEventIdAndLifeCycleStateAfterOrderByPriorityDesc(eventId, LifeCycleState.ACTIVE)
+
+
+        List<PricingStrategyResponseDTO> list = strategyRepository.findByEventIdAndStateOrderByPriorityDesc(eventId, LifeCycleState.ACTIVE)
                 .stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
+
+        return list;
     }
 
     // ==================== STRATEGY-SPECIFIC CREATION METHODS ====================
@@ -594,7 +598,7 @@ public class PricingStrategyService {
     @Transactional
     public List<StrategyApplicationResultDTO> applyAutoStrategiesToEvent(Long eventId) {
         List<PricingStrategy> autoStrategies =
-                strategyRepository.findByEventIdAndLifeCycleStateTrueAndAutoApplyTrueOrderByPriorityDesc(eventId);
+                strategyRepository.findByEventIdAndStateTrueAndAutoApplyTrueOrderByPriorityDesc(eventId);
 
         List<StrategyApplicationResultDTO> results = new ArrayList<>();
 

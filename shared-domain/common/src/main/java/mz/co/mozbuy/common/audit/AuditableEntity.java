@@ -43,24 +43,25 @@ public abstract class AuditableEntity<ID, U> extends DomainEntity<ID> implements
     private U updatedBy;
 
     // ==================== Ciclo de vida ====================
-    @Enumerated(EnumType.STRING)
-    @Column(name = "life_cycle_state", nullable = false, length = 50)
-    private LifeCycleState lifeCycleState = LifeCycleState.ACTIVE;
+
+    @Convert(converter = LifeCycleStateConverter.class)
+    @Column(name = "state", nullable = false, length = 50)
+    private LifeCycleState state = LifeCycleState.ACTIVE;
 
     // ==================== Métodos de ciclo de vida ====================
-    public void activate() { this.lifeCycleState = LifeCycleState.ACTIVE; }
-    public void inactivate() { this.lifeCycleState = LifeCycleState.INACTIVE; }
-    public void delete() { this.lifeCycleState = LifeCycleState.DELETED; }
-    public void block() { this.lifeCycleState = LifeCycleState.BLOCKED; }
-    public void ban() { this.lifeCycleState = LifeCycleState.BANNED; }
+    public void activate() { this.state = LifeCycleState.ACTIVE; }
+    public void inactivate() { this.state = LifeCycleState.INACTIVE; }
+    public void delete() { this.state = LifeCycleState.DELETED; }
+    public void block() { this.state = LifeCycleState.BLOCKED; }
+    public void ban() { this.state = LifeCycleState.BANNED; }
 
-    public boolean isActive() { return lifeCycleState == LifeCycleState.ACTIVE; }
-    public boolean isInactive() { return lifeCycleState == LifeCycleState.INACTIVE; }
-    public boolean isDeleted() { return lifeCycleState == LifeCycleState.DELETED; }
-    public boolean isBlocked() { return lifeCycleState == LifeCycleState.BLOCKED; }
-    public boolean isBanned() { return lifeCycleState == LifeCycleState.BANNED; }
+    public boolean isActive() { return state == LifeCycleState.ACTIVE; }
+    public boolean isInactive() { return state == LifeCycleState.INACTIVE; }
+    public boolean isDeleted() { return state == LifeCycleState.DELETED; }
+    public boolean isBlocked() { return state == LifeCycleState.BLOCKED; }
+    public boolean isBanned() { return state == LifeCycleState.BANNED; }
 
     // ==================== Soft delete automático ====================
     @PreRemove
-    public void softDelete() { this.lifeCycleState = LifeCycleState.DELETED; }
+    public void softDelete() { this.state = LifeCycleState.DELETED; }
 }

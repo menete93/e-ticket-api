@@ -127,7 +127,7 @@ public class OrganizerService {
     }
 
     public List<OrganizerResponseDTO> getActiveOrganizers() {
-        List<Organizer> organizers = organizerRepository.findByLifeCycleState(LifeCycleState.ACTIVE);
+        List<Organizer> organizers = organizerRepository.findByState(LifeCycleState.ACTIVE);
         return organizers.stream()
                 .map(this::toResponseDTO)
                 .collect(Collectors.toList());
@@ -145,7 +145,7 @@ public class OrganizerService {
         Organizer organizer = organizerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Organizer not found with id: " + id));
 
-        organizer.setLifeCycleState(LifeCycleState.INACTIVE);
+        organizer.setState(LifeCycleState.INACTIVE);
         organizerRepository.save(organizer);
         log.info("Deactivated organizer: {} ({})", organizer.getName(), organizer.getEmail());
     }
@@ -155,7 +155,7 @@ public class OrganizerService {
         Organizer organizer = organizerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Organizer not found with id: " + id));
 
-        organizer.setLifeCycleState(LifeCycleState.ACTIVE);
+        organizer.setState(LifeCycleState.ACTIVE);
         organizerRepository.save(organizer);
         log.info("Activated organizer: {} ({})", organizer.getName(), organizer.getEmail());
     }
@@ -172,7 +172,7 @@ public class OrganizerService {
         dto.setFlatFeePerTicket(organizer.getFlatFeePerTicket());
         dto.setTrialEventsRemaining(organizer.getTrialEventsRemaining());
         dto.setTrialUsedCount(organizer.getTrialUsedCount() != null ? organizer.getTrialUsedCount() : 0);
-        dto.setLifeCycleState(organizer.getLifeCycleState());
+        dto.setLifeCycleState(organizer.getState());
         dto.setAccountBalance(organizer.getAccountBalance());
         dto.setTotalEarnings(organizer.getTotalEarnings());
         dto.setTotalCommissionPaid(organizer.getTotalCommissionPaid());

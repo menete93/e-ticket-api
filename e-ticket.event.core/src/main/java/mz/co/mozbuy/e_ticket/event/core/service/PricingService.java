@@ -303,7 +303,7 @@ public class PricingService {
      * Relatório de estratégias mais eficazes
      */
     public List<PricingStrategyEffectivenessDTO> getStrategyEffectivenessReport(Long eventId) {
-        List<PricingStrategy> strategies = pricingStrategyRepository.findByEventIdAndLifeCycleStateAfterOrderByPriorityDesc(eventId,LifeCycleState.ACTIVE);
+        List<PricingStrategy> strategies = pricingStrategyRepository.findByEventIdAndStateOrderByPriorityDesc(eventId,LifeCycleState.ACTIVE);
 
         return strategies.stream()
                 .map(s -> PricingStrategyEffectivenessDTO.builder()

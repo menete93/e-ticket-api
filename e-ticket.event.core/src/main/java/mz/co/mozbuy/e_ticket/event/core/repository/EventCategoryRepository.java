@@ -27,7 +27,7 @@ public interface EventCategoryRepository extends JpaRepository<EventCategory, Lo
     /**
      * Lista todas as categorias ativas
      */
-    List<EventCategory> findByLifeCycleState(LifeCycleState lifeCycleState);
+    List<EventCategory> findByState(LifeCycleState lifeCycleState);
 
     /**
      * Verifica se existe categoria com o mesmo nome (ignorando case)
@@ -47,13 +47,13 @@ public interface EventCategoryRepository extends JpaRepository<EventCategory, Lo
     /**
      * Busca categorias com contagem de eventos
      */
-    @Query("SELECT ec, COUNT(e) as eventCount FROM EventCategory ec LEFT JOIN ec.events e WHERE ec.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE GROUP BY ec")
+    @Query("SELECT ec, COUNT(e) as eventCount FROM EventCategory ec LEFT JOIN ec.events e WHERE ec.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE GROUP BY ec")
     List<Object[]> findAllWithEventCount();
 
     /**
      * Busca categorias populares (com mais eventos)
      */
-    @Query("SELECT ec FROM EventCategory ec WHERE ec.lifeCycleState =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND SIZE(ec.events) > 0 ORDER BY SIZE(ec.events) DESC")
+    @Query("SELECT ec FROM EventCategory ec WHERE ec.state =  mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE AND SIZE(ec.events) > 0 ORDER BY SIZE(ec.events) DESC")
     List<EventCategory> findPopularCategories();
 
     /**
@@ -76,9 +76,9 @@ public interface EventCategoryRepository extends JpaRepository<EventCategory, Lo
      * Busca categorias com estatísticas completas
      */
     @Query("SELECT ec, COUNT(e) as eventCount, " +
-            "SUM(CASE WHEN e.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE THEN 1 ELSE 0 END) as activeEvents " +
+            "SUM(CASE WHEN e.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE THEN 1 ELSE 0 END) as activeEvents " +
             "FROM EventCategory ec LEFT JOIN ec.events e " +
-            "WHERE ec.lifeCycleState = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
+            "WHERE ec.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE " +
             "GROUP BY ec " +
             "ORDER BY eventCount DESC")
     List<Object[]> findCategoriesWithStatistics();
