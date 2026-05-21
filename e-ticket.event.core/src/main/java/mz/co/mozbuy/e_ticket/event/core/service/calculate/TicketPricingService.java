@@ -11,6 +11,7 @@ import mz.co.mozbuy.e_ticket.event.core.model.TicketSale;
 import mz.co.mozbuy.e_ticket.event.core.model.PricingStrategy;
 import mz.co.mozbuy.e_ticket.event.core.model.EventTicket;
 import mz.co.mozbuy.e_ticket.event.core.model.CustomerPurchaseHistory;
+import mz.co.mozbuy.e_ticket.event.core.repository.EventTicketRepository;
 import mz.co.mozbuy.e_ticket.event.core.repository.TicketSaleRepository;
 import mz.co.mozbuy.e_ticket.event.core.repository.PricingStrategyRepository;
 import mz.co.mozbuy.e_ticket.event.core.service.LoyaltyService;
@@ -27,13 +28,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TicketPricingService {
 
-    private final TicketSaleRepository ticketSaleRepository;
     private final PricingStrategyRepository strategyRepository;
     private final LoyaltyService loyaltyService;
+    private final EventTicketRepository eventTicketRepository;
 
     /**
      * Calcula o preço final com todas as estratégias aplicáveis
      */
+// TicketPricingService.java - Método calculatePrice corrigido
+
     public PriceCalculationResponseDTO calculatePrice(PriceCalculationRequestDTO request) {
         log.info("📊 Calculando preço para {} tickets do evento: {}",
                 request.getTicketQuantities().size(), request.getEventId());
@@ -44,62 +47,48 @@ public class TicketPricingService {
             Optional<CustomerPurchaseHistory> historyOpt = loyaltyService.getCustomerHistory(request.getUserId());
             if (historyOpt.isPresent()) {
                 customerHistory = historyOpt.get();
-                log.debug("Cliente: tier={}, compras={}, total gasto={}",
-                        customerHistory.getLoyaltyTier(),
-                        customerHistory.getTotalPurchases(),
-                        customerHistory.getTotalSpent());
             }
         }
 
         List<PriceBreakdownItemDTO> breakdown = new ArrayList<>();
         BigDecimal subtotal = BigDecimal.ZERO;
 
-        // Buscar todos os TicketSale pelos IDs
-        List<Long> ticketIds = new ArrayList<>(request.getTicketQuantities().keySet());
-        List<TicketSale> tickets = ticketSaleRepository.findAllById(ticketIds);
+        // ✅ CORRETO: Buscar EventTicket (não TicketSale)
+        List<Long> eventTicketIds = new ArrayList<>(request.getTicketQuantities().keySet());
+        List<EventTicket> eventTickets = eventTicketRepository.findAllById(eventTicketIds);
 
-        // Mapear TicketSale por ID para fácil acesso
-        Map<Long, TicketSale> ticketSaleMap = tickets.stream()
-                .collect(Collectors.toMap(TicketSale::getId, t -> t));
+        // Mapear EventTicket por ID
+        Map<Long, EventTicket> eventTicketMap = eventTickets.stream()
+                .collect(Collectors.toMap(EventTicket::getId, t -> t));
 
-        // 🔥 IMPORTANTE: Mapear EventTicket por ID para facilitar acesso
-        Map<Long, EventTicket> eventTicketMap = new HashMap<>();
-        for (TicketSale ticketSale : tickets) {
-            EventTicket eventTicket = ticketSale.getTicket();
-            if (eventTicket != null) {
-                eventTicketMap.put(ticketSale.getId(), eventTicket);
-            }
-        }
-
-        // Calcular subtotal base usando o preço ORIGINAL do EventTicket
+        // Calcular subtotal base usando o preço do EventTicket
         for (Map.Entry<Long, Integer> entry : request.getTicketQuantities().entrySet()) {
-            Long ticketSaleId = entry.getKey();
+            Long eventTicketId = entry.getKey();
             Integer quantity = entry.getValue();
 
-            TicketSale ticketSale = ticketSaleMap.get(ticketSaleId);
-            EventTicket eventTicket = eventTicketMap.get(ticketSaleId);
+            EventTicket eventTicket = eventTicketMap.get(eventTicketId);
 
-            if (ticketSale == null || eventTicket == null || quantity <= 0) continue;
-
-            // ✅ CORREÇÃO: Usar o originalPrice do EventTicket (preço base definido pelo organizador)
-            BigDecimal originalPrice = eventTicket.getOriginalPrice();
-
-            // 🔥 FALLBACK: Se não tiver originalPrice no EventTicket, usa o currentPrice
-            if (originalPrice == null) {
-                originalPrice = eventTicket.getCurrentPrice();
-                log.debug("Ticket {} sem originalPrice, usando currentPrice: {}",
-                        eventTicket.getId(), originalPrice);
+            if (eventTicket == null || quantity <= 0) {
+                log.warn("Ticket não encontrado ou quantidade inválida: id={}, qty={}", eventTicketId, quantity);
+                continue;
             }
 
-            BigDecimal ticketSubtotal = originalPrice.multiply(BigDecimal.valueOf(quantity));
+            // Usar o preço atual do ticket (currentPrice)
+            BigDecimal unitPrice = eventTicket.getCurrentPrice();
+            if (unitPrice == null) {
+                unitPrice = BigDecimal.ZERO;
+                log.warn("Ticket {} sem preço definido", eventTicketId);
+            }
+
+            BigDecimal ticketSubtotal = unitPrice.multiply(BigDecimal.valueOf(quantity));
             subtotal = subtotal.add(ticketSubtotal);
 
             breakdown.add(PriceBreakdownItemDTO.builder()
                     .type("TICKET")
-                    .ticketId(ticketSaleId)
+                    .ticketId(eventTicketId)
                     .ticketName(eventTicket.getTicketName())
                     .category(eventTicket.getCategory())
-                    .basePrice(originalPrice)
+                    .basePrice(unitPrice)
                     .quantity(quantity)
                     .subtotal(ticketSubtotal)
                     .build());
@@ -122,8 +111,8 @@ public class TicketPricingService {
                 subtotal,
                 breakdown,
                 strategies,
-                eventTicketMap,  // 👈 Passar mapa de EventTicket
-                ticketSaleMap);   // 👈 Passar mapa de TicketSale
+                eventTicketMap,
+                null); // Não precisa mais do ticketSaleMap
 
         // Calcular total final
         response.setFinalPrice(calculateFinalPrice(response));
@@ -134,7 +123,6 @@ public class TicketPricingService {
 
         return response;
     }
-
     private PriceCalculationResponseDTO applyAutomaticStrategies(
             PriceCalculationRequestDTO request,
             CustomerPurchaseHistory customerHistory,

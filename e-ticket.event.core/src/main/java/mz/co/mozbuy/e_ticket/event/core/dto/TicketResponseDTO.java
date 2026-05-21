@@ -32,7 +32,7 @@ public class TicketResponseDTO {
     private LocalDateTime salesEndDate;
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private Integer maxTicketsPerUser;
-    private LifeCycleState lifeCycleState;
+    private LifeCycleState state;
     private Boolean isAvailable;
     private Boolean isSalesPeriodActive;
     private BigDecimal totalRevenue;

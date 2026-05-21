@@ -15,4 +15,5 @@ public class TicketSimpleDTO {
     private Long id;
     private String ticketName;
     private BigDecimal price;
+    private int AvailableQuantity;
 }

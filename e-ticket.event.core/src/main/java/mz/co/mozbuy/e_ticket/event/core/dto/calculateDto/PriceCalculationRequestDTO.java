@@ -17,6 +17,7 @@ public class PriceCalculationRequestDTO {
     private Long userId;
     private Long eventId;
     private String email;
+    private String couponCode;
     private Map<Long, Integer> ticketQuantities; // ticketId -> quantidade
 }
 

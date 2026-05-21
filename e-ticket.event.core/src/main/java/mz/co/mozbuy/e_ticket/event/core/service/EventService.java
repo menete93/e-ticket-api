@@ -1,6 +1,7 @@
 // EventService.java
 package mz.co.mozbuy.e_ticket.event.core.service;
 
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
@@ -236,73 +237,6 @@ public class EventService {
         log.info("Event deleted: {} by {}", event.getName(), username);
     }
 
-    /**
-     * Converte Entity para DTO
-     */
-//    private EventResponseDTO toDTO(Event event) {
-//        EventResponseDTO dto = new EventResponseDTO();
-//        dto.setId(event.getId());
-//        dto.setName(event.getName());
-//        dto.setDescription(event.getDescription());
-//        dto.setGeographicLocation(event.getGeographicLocation());
-//        dto.setCategory(event.getCategory());
-//        dto.setEventDate(event.getEventDate());
-//        dto.setStartTime(event.getStartTime());
-//        dto.setEndTime(event.getEndTime());
-//        dto.setCoverImageUrl(event.getCoverImageUrl());
-//        dto.setBannerImageUrl(event.getBannerImageUrl());
-//        dto.setMaxAttendees(event.getMaxAttendees());
-//        dto.setMinAttendees(event.getMinAttendees());
-//        dto.setIsPublic(event.getIsPublic());
-//        dto.setIsFeatured(event.getIsFeatured());
-//        dto.setIsFree(event.getIsFree());
-//        dto.setRegistrationDeadline(event.getRegistrationDeadline());
-//        dto.setTotalTickets(event.getTotalTickets());
-//        dto.setAvailableTickets(event.getAvailableTickets());
-//        dto.setSoldTickets(event.getSoldTickets());
-//        dto.setReservedTickets(event.getReservedTickets());
-//        dto.setCreatedAt(event.getCreatedAt());
-//        dto.setUpdatedAt(event.getUpdatedAt());
-//        dto.setCreatedBy(event.getCreatedBy());
-//        dto.setUpdatedBy(event.getUpdatedBy());
-//
-//        // Converter tickets se existirem
-//        if (event.getTickets() != null && !event.getTickets().isEmpty()) {
-//            dto.setTickets(event.getTickets().stream()
-//                    .map(eventTicketService::toDTO)
-//                    .collect(Collectors.toList()));
-//        }
-//
-//        return dto;
-//    }
-
-//    public List<EventResponseDTO> findByState() {
-//        // Agora use a query JPQL com JOIN FETCH
-//        List<Event> events = eventRepository.findActiveNativeCast();
-//
-//        if (events.isEmpty()) {
-//            // Teste sem JOIN primeiro
-//            List<Event> eventsWithoutTickets = eventRepository.findActiveNativeCast();
-//            System.out.println("Eventos sem tickets: " + eventsWithoutTickets.size());
-//
-//            // Verifique se há algum problema com a entidade EventTicket
-//            for (Event event : eventsWithoutTickets) {
-//                System.out.println("Evento ID: " + event.getId() + ", Nome: " + event.getName());
-//                try {
-//                    // Tente forçar o carregamento dos tickets
-//                    Hibernate.initialize(event.getTickets());
-//                    System.out.println("  Tickets: " + event.getTickets().size());
-//                } catch (Exception e) {
-//                    System.out.println("  ERRO ao carregar tickets: " + e.getMessage());
-//                }
-//            }
-//        }
-//
-//        return events.stream()
-//                .map(eventMapper::toDTO)
-//                .collect(Collectors.toList());
-//    }
-
 
     public List<EventResponseDTO> findByState() {
         System.out.println("=== BUSCANDO EVENTOS ATIVOS ===");
@@ -394,22 +328,22 @@ public class EventService {
     }
 
 
+// EventService.java - Versão mais simples (deixando o Listener cuidar do state)
+
     @Transactional
     public EventResponseDTO cancelEvent(Long eventId, CancelEventRequestDTO cancelRequest) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new EventNotFoundException(eventId));
 
-        // Verificar se já foi cancelado
         if (Boolean.TRUE.equals(event.getIsCancelled())) {
             throw new IllegalStateException("Evento já está cancelado");
         }
 
-        // Verificar se o evento já ocorreu
         if (event.getEventDate() != null && event.getEventDate().isBefore(LocalDateTime.now())) {
             throw new IllegalStateException("Não é possível cancelar um evento que já ocorreu");
         }
 
-        // Cancelar o evento
+        // Cancelar o evento (o Listener vai atualizar o state automaticamente)
         event.setIsCancelled(true);
         event.setCancelledAt(LocalDateTime.now());
         event.setCancelReason(cancelRequest.getReason());
@@ -417,14 +351,219 @@ public class EventService {
         // Se houver tickets vendidos e organizador optou por reembolsar
         if (Boolean.TRUE.equals(cancelRequest.getRefundTickets()) && event.getSoldTickets() > 0) {
             event.setRefundProcessed(true);
-            // Disparar processo de reembolso assíncrono  POR IMPLEMENTAR UMA TASK
 //            refundService.processRefundsForEvent(eventId);
         }
 
         Event updatedEvent = eventRepository.save(event);
-        log.info("Event cancelled: {} (ID: {}) - Reason: {}",
-                event.getName(), event.getId(), cancelRequest.getReason());
+        log.info("❌ Evento cancelado - ID: {}, Nome: {}", event.getId(), event.getName());
 
         return eventMapper.toDTO(updatedEvent);
     }
+
+    // EventService.java - Adicione estes métodos no final da classe
+
+    // ==================== MÉTODOS PARA GERENCIAMENTO DE ESTADO ====================
+
+    /**
+     * Buscar eventos por estado
+     */
+    @Transactional(readOnly = true)
+    public List<EventResponseDTO> getEventsByStateAndReferenceId(LifeCycleState state) {
+        log.info("🔍 Buscando eventos com estado: {}", state);
+
+        List<Event> events = eventRepository.findByState(state);
+        return events.stream()
+                .map(eventMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Atualizar estado de um evento específico (manual)
+     */
+    @Transactional
+    public Map<String, Object> updateEventState(Long eventId) {
+        log.info("🔄 Atualizando estado manual do evento ID: {}", eventId);
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EventNotFoundException(eventId));
+
+        LifeCycleState oldState = event.getState();
+
+        // Calcular novo estado baseado nas regras
+        LifeCycleState newState = calculateNewState(event);
+        event.setState(newState);
+        eventRepository.save(event);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("eventId", eventId);
+        response.put("eventName", event.getName());
+        response.put("oldState", oldState);
+        response.put("newState", newState);
+        response.put("message", String.format("Estado do evento atualizado de %s para %s", oldState, newState));
+        response.put("timestamp", LocalDateTime.now());
+
+        log.info("✅ Evento {} atualizado: {} -> {}", eventId, oldState, newState);
+        return response;
+    }
+
+    /**
+     * Atualizar estado de todos os eventos (forçar execução da task)
+     */
+    @Transactional
+    public Map<String, Object> updateAllEventsState() {
+        log.info("🔄 Forçando atualização de estado de todos os eventos");
+
+        LocalDateTime startTime = LocalDateTime.now();
+
+        // REGRA 1: Eventos cancelados -> BANNED
+        List<Event> cancelledEvents = eventRepository.findByIsCancelledTrueAndStateNot(LifeCycleState.BANNED);
+        for (Event event : cancelledEvents) {
+            event.setState(LifeCycleState.BANNED);
+            log.info("🚫 Evento [{}] - {} cancelado -> BANNED", event.getId(), event.getName());
+        }
+
+        // REGRA 2: Eventos com data expirada -> INACTIVE
+        LocalDateTime now = LocalDateTime.now();
+        List<Event> expiredEvents = eventRepository.findByEventDateBeforeAndIsCancelledFalse(now);
+        for (Event event : expiredEvents) {
+            event.setState(LifeCycleState.INACTIVE);
+            log.info("📅 Evento [{}] - {} expirado -> INACTIVE", event.getId(), event.getName());
+        }
+
+        eventRepository.saveAll(cancelledEvents);
+        eventRepository.saveAll(expiredEvents);
+
+        LocalDateTime endTime = LocalDateTime.now();
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("message", "Todos os eventos foram atualizados");
+        response.put("timestamp", startTime);
+        response.put("cancelledUpdated", cancelledEvents.size());
+        response.put("expiredUpdated", expiredEvents.size());
+        response.put("executionTimeMs", java.time.Duration.between(startTime, endTime).toMillis());
+
+        log.info("✅ Atualização concluída - Cancelados: {}, Expirados: {}, Tempo: {} ms",
+                cancelledEvents.size(), expiredEvents.size(),
+                java.time.Duration.between(startTime, endTime).toMillis());
+
+        return response;
+    }
+
+    /**
+     * Buscar eventos cancelados
+     */
+    @Transactional(readOnly = true)
+    public List<EventResponseDTO> getCancelledEvents() {
+        log.info("🔍 Buscando eventos cancelados");
+
+        List<Event> events = eventRepository.findByIsCancelledTrue();
+        return events.stream()
+                .map(eventMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Buscar eventos expirados (data passada mas não cancelados)
+     */
+    @Transactional(readOnly = true)
+    public List<EventResponseDTO> getExpiredEvents() {
+        log.info("🔍 Buscando eventos expirados");
+
+        LocalDateTime now = LocalDateTime.now();
+        List<Event> events = eventRepository.findByEventDateBeforeAndIsCancelledFalse(now);
+        return events.stream()
+                .map(eventMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Buscar eventos ativos (não cancelados, data futura e state ACTIVE)
+     */
+    @Transactional(readOnly = true)
+    public List<EventResponseDTO> getActiveEvents() {
+        log.info("🔍 Buscando eventos ativos");
+
+        LocalDateTime now = LocalDateTime.now();
+        List<Event> events = eventRepository.findByIsCancelledFalseAndEventDateAfter(now);
+        return events.stream()
+                .map(eventMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Calcular novo estado baseado nas regras de negócio
+     */
+    private LifeCycleState calculateNewState(Event event) {
+        LocalDateTime now = LocalDateTime.now();
+
+        // REGRA 1: Evento cancelado -> BANNED
+        if (Boolean.TRUE.equals(event.getIsCancelled())) {
+            return LifeCycleState.BANNED;
+        }
+
+        // REGRA 2: Evento já ocorreu -> INACTIVE
+        if (event.getEventDate() != null && event.getEventDate().isBefore(now)) {
+            return LifeCycleState.INACTIVE;
+        }
+
+        // Caso contrário -> ACTIVE
+        return LifeCycleState.ACTIVE;
+    }
+
+    /**
+     * Buscar eventos ativos com tickets (para landing page)
+     */
+//    @Transactional(readOnly = true)
+//    public List<EventWithTicketsDTO> getActiveEventsForLanding() {
+//        log.info("🔍 Buscando eventos ativos para página inicial");
+//
+//        LocalDateTime now = LocalDateTime.now();
+//        List<Event> events = eventRepository.findByIsCancelledFalseAndEventDateAfter(now);
+//
+//        return events.stream()
+//                .map(event -> {
+//                    EventWithTicketsDTO dto = new EventWithTicketsDTO();
+//                    dto.setEvent(eventMapper.toDTO(event));
+//                    dto.setTickets(event.getTickets().stream()
+//                            .map(ticket -> {
+//                                TicketSimpleDTO ticketDto = new TicketSimpleDTO();
+//                                ticketDto.setId(ticket.getId());
+//                                ticketDto.setTicketName(ticket.getTicketName());
+//                                ticketDto.setPrice(ticket.getCurrentPrice());
+//                                ticketDto.setAvailableQuantity(ticket.getAvailableQuantity());
+//                                return ticketDto;
+//                            })
+//                            .collect(Collectors.toList()));
+//                    return dto;
+//                })
+//                .collect(Collectors.toList());
+//    }
+
+
+    /**
+     * Busca TODOS os eventos do organizador, independente do estado
+     * Não aplica filtro de estado (ACTIVE, INACTIVE, BANNED, etc.)
+     *
+     * @param referenceId ID de referência do organizador
+     * @return Lista com todos os eventos do organizador
+     */
+    @Transactional(readOnly = true)
+    public List<EventResponseDTO> getAllEventsByOrganizer(String referenceId) {
+        log.info("🔍 Buscando TODOS os eventos do organizador: {} (sem filtro de estado)", referenceId);
+
+        // Buscar todos os eventos do organizador (sem filtro de estado)
+        List<Event> events = eventRepository.findAll(referenceId);
+
+        log.info("✅ Encontrados {} eventos para o organizador {}", events.size(), referenceId);
+
+        // Log da distribuição por estado
+        Map<LifeCycleState, Long> stateCount = events.stream()
+                .collect(Collectors.groupingBy(Event::getState, Collectors.counting()));
+        log.info("📊 Distribuição por estado: {}", stateCount);
+
+        return events.stream()
+                .map(eventMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
 }

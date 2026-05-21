@@ -39,4 +39,6 @@ public interface OrganizerRepository extends JpaRepository<Organizer, Long> {
 
     Optional<Organizer> findByUserId(Long userId);
 
+
+
 }

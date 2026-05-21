@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import mz.co.mozbuy.common.audit.AuditableEntity;
+import mz.co.mozbuy.e_ticket.event.core.service.listeners.EventCancelListener;
 import org.hibernate.annotations.Fetch;
 import org.hibernate.annotations.FetchMode;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -23,6 +24,7 @@ import java.math.BigDecimal; // 🔥 NOVO IMPORT
 @Table(name = "events")
 @Getter
 @Setter
+@EntityListeners(EventCancelListener.class)
 public class Event extends AuditableEntity<Long, String> {
 
     @NotBlank(message = "Event name is required")

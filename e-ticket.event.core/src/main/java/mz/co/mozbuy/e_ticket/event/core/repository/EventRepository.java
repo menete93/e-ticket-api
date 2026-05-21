@@ -44,7 +44,7 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
 
     List<Event> findByCreatedBy(String createdBy);
 
-    @Query("SELECT e FROM Event e WHERE e.createdBy = :username AND e.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE")
+    @Query("SELECT e FROM Event e WHERE e.createdBy = :username AND e.state = 'ACTIVE' ")
     List<Event> findActiveEventsByUser(@Param("username") String username);
 
         @Lock(LockModeType.PESSIMISTIC_WRITE) // Evita concorrência
@@ -121,10 +121,169 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
     @Query("""
     SELECT e FROM Event e
     LEFT JOIN FETCH e.tickets
-    WHERE e.state = mz.co.mozbuy.common.audit.LifeCycleState.ACTIVE
+    WHERE e.state = 'ACTIVE'
       AND e.organizer.referenceId = :referenceId
 """)
     List<Event> findActiveEventsByOrganizerWithTickets(@Param("referenceId") String referenceId);
+
+
+
+    @Query("""
+    SELECT e FROM Event e
+    LEFT JOIN FETCH e.tickets
+    WHERE e.organizer.referenceId = :referenceId
+""")
+    List<Event> findAll(@Param("referenceId") String referenceId);
+
+    @Query("""
+    SELECT e FROM Event e
+    LEFT JOIN FETCH e.tickets
+    WHERE e.state = 'ACTIVE'
+      AND e.organizer.referenceId = :referenceId
+""")
+    List<Event> findAllForOrganizer(@Param("referenceId") String referenceId);
+
+    // Buscar eventos com prazo expirado
+    @Query("SELECT e FROM Event e WHERE e.registrationDeadline < :now " +
+            "AND e.soldTickets < COALESCE(e.minAttendees, 1) " +
+            "AND e.state = 'ACTIVE'")
+    List<Event> findByRegistrationDeadlineBeforeAndSoldTicketsLessThanMinAttendees(@Param("now") LocalDateTime now);
+
+    // Buscar eventos que podem ser reativados
+    List<Event> findByIsCancelledFalseAndEventDateAfterAndState(LocalDateTime date, LifeCycleState state);
+
+    // Buscar eventos prestes a expirar
+    List<Event> findByRegistrationDeadlineBetweenAndState(LocalDateTime start, LocalDateTime end, LifeCycleState state);
+
+    // Buscar eventos com baixa adesão
+    @Query("SELECT e FROM Event e WHERE e.eventDate BETWEEN :startDate AND :endDate " +
+            "AND e.state = 'ACTIVE' " +
+            "AND e.maxAttendees IS NOT NULL " +
+            "AND (e.soldTickets * 100.0 / e.maxAttendees) < :percentageThreshold")
+    List<Event> findEventsWithLowAttendance(@Param("startDate") LocalDateTime startDate,
+                                            @Param("endDate") LocalDateTime endDate,
+                                            @Param("percentageThreshold") int percentageThreshold);
+
+
+
+    /**
+     * Buscar eventos cancelados que NÃO estão no estado BANNED
+     */
+    @Query("SELECT e FROM Event e WHERE e.isCancelled = true AND e.state != :excludeState")
+    List<Event> findByIsCancelledTrueAndStateNot(@Param("excludeState") LifeCycleState excludeState);
+
+    /**
+     * Buscar eventos cancelados por estado específico
+     */
+    List<Event> findByIsCancelledTrueAndState(LifeCycleState state);
+
+    // ==================== REGRA 2: Eventos com data expirada ====================
+
+    /**
+     * Buscar eventos NÃO cancelados com data expirada
+     */
+    @Query("SELECT e FROM Event e WHERE e.eventDate < :now AND e.isCancelled = false")
+    List<Event> findByEventDateBeforeAndIsCancelledFalse(@Param("now") LocalDateTime now);
+
+    /**
+     * Buscar eventos com data entre intervalo e NÃO cancelados
+     */
+    @Query("SELECT e FROM Event e WHERE e.eventDate BETWEEN :startDate AND :endDate AND e.isCancelled = false")
+    List<Event> findByEventDateBetweenAndIsCancelledFalse(@Param("startDate") LocalDateTime startDate,
+                                                          @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * Buscar eventos com data expirada e estado específico
+     */
+    @Query("SELECT e FROM Event e WHERE e.eventDate < :now AND e.state = :state")
+    List<Event> findByEventDateBeforeAndState(@Param("now") LocalDateTime now,
+                                              @Param("state") LifeCycleState state);
+
+
+    // EventRepository.java - Adicione estes métodos no final da interface
+
+    // ==================== MÉTODOS PARA EVENTOS CANCELADOS E EXPIRADOS ====================
+
+    /**
+     * Buscar eventos cancelados (isCancelled = true)
+     */
+    List<Event> findByIsCancelledTrue();
+
+    /**
+     * Buscar eventos NÃO cancelados com data futura (para landing page)
+     */
+    @Query("SELECT e FROM Event e WHERE e.isCancelled = false AND e.eventDate > :now AND e.state = 'ACTIVE'")
+    List<Event> findByIsCancelledFalseAndEventDateAfter(@Param("now") LocalDateTime now);
+
+    /**
+     * Buscar eventos NÃO cancelados com data futura (com tickets carregados)
+     */
+    @Query("SELECT DISTINCT e FROM Event e LEFT JOIN FETCH e.tickets WHERE e.isCancelled = false AND e.eventDate > :now AND e.state = 'ACTIVE'")
+    List<Event> findActiveEventsWithTicketsForLanding(@Param("now") LocalDateTime now);
+
+    /**
+     * Buscar eventos expirados (data passada, não cancelados, não BANNED)
+     */
+    @Query("SELECT e FROM Event e WHERE e.eventDate < :now AND e.isCancelled = false AND e.state != 'INACTIVE'")
+    List<Event> findExpiredEventsNotUpdated(@Param("now") LocalDateTime now);
+
+    /**
+     * Contar eventos por estado
+     */
+    @Query("SELECT COUNT(e) FROM Event e WHERE e.state = :state")
+    long countByState(@Param("state") LifeCycleState state);
+
+    /**
+     * Buscar eventos por organizador e estado
+     */
+    @Query("SELECT e FROM Event e WHERE e.organizer.referenceId = :referenceId AND e.state = :state")
+    List<Event> findByOrganizerReferenceIdAndState(@Param("referenceId") String referenceId,
+                                                   @Param("state") LifeCycleState state);
+
+    /**
+     * Buscar eventos por organizador e data
+     */
+    @Query("SELECT e FROM Event e WHERE e.organizer.referenceId = :referenceId AND e.eventDate BETWEEN :startDate AND :endDate")
+    List<Event> findByOrganizerAndDateRange(@Param("referenceId") String referenceId,
+                                            @Param("startDate") LocalDateTime startDate,
+                                            @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * Buscar eventos com tickets vendidos
+     */
+    @Query("SELECT e FROM Event e WHERE e.soldTickets > 0 AND e.state = 'ACTIVE'")
+    List<Event> findEventsWithSoldTickets();
+
+    /**
+     * Buscar eventos por nome e estado
+     */
+    @Query("SELECT e FROM Event e WHERE LOWER(e.name) LIKE LOWER(CONCAT('%', :name, '%')) AND e.state = :state")
+    List<Event> findByNameContainingAndState(@Param("name") String name,
+                                             @Param("state") LifeCycleState state);
+
+    /**
+     * Atualizar estado em lote (bulk update)
+     */
+    @Modifying
+    @Query("UPDATE Event e SET e.state = :newState WHERE e.id IN :eventIds")
+    int bulkUpdateState(@Param("eventIds") List<Long> eventIds,
+                        @Param("newState") LifeCycleState newState);
+
+    /**
+     * Atualizar eventos expirados para INACTIVE (bulk update)
+     */
+    @Modifying
+    @Query("UPDATE Event e SET e.state = 'INACTIVE' WHERE e.eventDate < :now AND e.isCancelled = false AND e.state = 'ACTIVE'")
+    int bulkUpdateExpiredToInactive(@Param("now") LocalDateTime now);
+
+    /**
+     * Atualizar eventos cancelados para BANNED (bulk update)
+     */
+    @Modifying
+    @Query("UPDATE Event e SET e.state = 'BANNED' WHERE e.isCancelled = true AND e.state != 'BANNED'")
+    int bulkUpdateCancelledToBanned();
+
+
 
 
 }
