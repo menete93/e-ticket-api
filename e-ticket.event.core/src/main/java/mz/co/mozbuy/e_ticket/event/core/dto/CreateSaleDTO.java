@@ -6,10 +6,16 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 
 @Data
 public class CreateSaleDTO {
 
+    // ✅ NOVO: para múltiplos tickets (mantém compatibilidade)
+    private Map<Long, Integer> ticketQuantities;
+
+    // ✅ Mantém para compatibilidade (um único ticket)
     @NotNull(message = "Ticket ID is required")
     private Long ticketId;
 
@@ -28,15 +34,51 @@ public class CreateSaleDTO {
 
     private String paymentMethod;
 
-    // 🔥 NOVO: ID do usuário (vem do token JWT no front-end)
     private Long userId;
 
-    // 🔥 OPCIONAL: Para garantir que o preço calculado no front-end
-    // corresponde ao que o backend calculou
     private BigDecimal expectedTotalAmount;
 
-    // 🔥 OPCIONAL: Para rastrear de onde veio a compra
     private String utmSource;
     private String utmMedium;
     private String utmCampaign;
+
+    // ==================== MÉTODOS AUXILIARES ====================
+
+    /**
+     * Normaliza as quantidades de tickets (suporta tanto o modelo antigo quanto o novo)
+     */
+    public Map<Long, Integer> getNormalizedTicketQuantities() {
+        Map<Long, Integer> result = new HashMap<>();
+
+        if (ticketQuantities != null && !ticketQuantities.isEmpty()) {
+            result.putAll(ticketQuantities);
+        }
+
+        if (ticketId != null && quantity != null && quantity > 0) {
+            // Se o ticketId já existe no map, soma as quantidades
+            result.merge(ticketId, quantity, Integer::sum);
+        }
+
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException("Nenhum ticket informado");
+        }
+
+        return result;
+    }
+
+    /**
+     * Retorna a quantidade total de ingressos
+     */
+    public int getTotalQuantity() {
+        return getNormalizedTicketQuantities().values().stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+    }
+
+    /**
+     * Verifica se tem múltiplos tickets diferentes
+     */
+    public boolean hasMultipleTicketTypes() {
+        return getNormalizedTicketQuantities().size() > 1;
+    }
 }

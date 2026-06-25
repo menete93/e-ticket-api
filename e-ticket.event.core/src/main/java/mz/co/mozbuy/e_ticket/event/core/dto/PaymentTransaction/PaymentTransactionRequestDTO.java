@@ -1,5 +1,7 @@
 package mz.co.mozbuy.e_ticket.event.core.dto.PaymentTransaction;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,11 +14,27 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PaymentTransactionRequestDTO {
+
+    private String reservationCode;  // ← antes transactionId
+
+    @NotNull(message = "Sale ID é obrigatório")
     private Long saleId;
+
+    @NotNull(message = "Event ID é obrigatório")
     private Long eventId;
+
     private Long userId;
+
+    @NotNull(message = "Amount é obrigatório")
     private BigDecimal amount;
-    private String payerPhone;
-    private String payerEmail;
-    private String payerName;
+
+    @NotBlank(message = "Payment method code é obrigatório")
+    private String paymentMethodCode;
+
+    private String currency;
+
+
+    private Integer quantity;
+
+
 }

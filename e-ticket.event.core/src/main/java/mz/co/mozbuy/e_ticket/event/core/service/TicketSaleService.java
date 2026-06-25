@@ -5,8 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.common.audit.LifeCycleState;
 import mz.co.mozbuy.e_ticket.event.core.dto.CreateSaleDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.PaymentTransaction.PaymentTransactionRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.SaleResponseDTO;
-import mz.co.mozbuy.e_ticket.event.core.dto.calculateDto.PriceBreakdownItemDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.calculateDto.PriceCalculationRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.calculateDto.PriceCalculationResponseDTO;
 import mz.co.mozbuy.e_ticket.event.core.enums.CommissionCalculation;
@@ -15,13 +15,13 @@ import mz.co.mozbuy.e_ticket.event.core.exceptions.*;
 import mz.co.mozbuy.e_ticket.event.core.model.*;
 import mz.co.mozbuy.e_ticket.event.core.repository.*;
 import mz.co.mozbuy.e_ticket.event.core.service.calculate.TicketPricingService;
+import mz.co.mozbuy.e_ticket.event.core.service.payment.HybridPaymentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -37,31 +37,51 @@ public class TicketSaleService {
     private final LoyaltyService loyaltyService;
     private final TicketPricingService ticketPricingService;
     private final ObjectMapper objectMapper;
+    private final HybridPaymentService hybridPaymentService;
+    private final TicketSaleItemRepository ticketSaleItemRepository;
 
     @Transactional
     public SaleResponseDTO createSale(CreateSaleDTO saleDTO) {
-        log.info("📝 Creating sale for ticket: {}, quantity: {}, user: {}",
-                saleDTO.getTicketId(), saleDTO.getQuantity(), saleDTO.getUserId());
+        // ✅ Usar o método normalizado
+        Map<Long, Integer> ticketQuantities = saleDTO.getNormalizedTicketQuantities();
+        int totalQuantity = saleDTO.getTotalQuantity();
 
-        // 1. Buscar ticket com LOCK PESSIMISTA
-        EventTicket ticket = eventTicketRepository.findByIdWithLock(saleDTO.getTicketId())
-                .orElseThrow(() -> new TicketNotFoundException(saleDTO.getTicketId()));
+        log.info("📝 Creating sale for tickets: {}, user: {}", ticketQuantities, saleDTO.getUserId());
 
-        // 2. Validar ticket para venda
-        validateTicketForSale(ticket, saleDTO.getQuantity());
+        // 1. Buscar e validar TODOS os tickets
+        List<EventTicket> tickets = new ArrayList<>();
+        Map<Long, EventTicket> ticketMap = new HashMap<>();
 
-        Event event = ticket.getEvent();
+        for (Map.Entry<Long, Integer> entry : ticketQuantities.entrySet()) {
+            Long ticketId = entry.getKey();
+            Integer quantity = entry.getValue();
+
+            EventTicket ticket = eventTicketRepository.findByIdWithLock(ticketId)
+                    .orElseThrow(() -> new TicketNotFoundException(ticketId));
+            validateTicketForSale(ticket, quantity);
+
+            tickets.add(ticket);
+            ticketMap.put(ticketId, ticket);
+        }
+
+        // 2. Pegar o primeiro ticket para referências (evento, organizador)
+        EventTicket firstTicket = tickets.get(0);
+        Event event = firstTicket.getEvent();
         Organizer organizer = event.getOrganizer();
 
-        // 3. Calcular preço com as estratégias
-        PriceCalculationResponseDTO priceCalculation = calculatePriceWithStrategies(saleDTO, ticket, event);
+        // ✅ Guardar IDs para usar nas queries
+        Long eventId = event.getId();
+        Long organizerId = organizer.getId();
 
-        // 4. Validar preço esperado (se fornecido)
+        // 3. Calcular preço total (já suporta múltiplos tickets!)
+        PriceCalculationResponseDTO priceCalculation = calculatePriceWithStrategies(saleDTO, ticketQuantities, event);
+
+        // 4. Validar preço esperado
         if (saleDTO.getExpectedTotalAmount() != null) {
             validateExpectedPrice(saleDTO.getExpectedTotalAmount(), priceCalculation.getFinalPrice());
         }
 
-        // 5. Aplicar cupom se fornecido
+        // 5. Aplicar cupom
         DiscountCoupon coupon = null;
         BigDecimal couponDiscount = BigDecimal.ZERO;
         BigDecimal finalAmount = priceCalculation.getFinalPrice();
@@ -78,129 +98,201 @@ public class TicketSaleService {
 
         // 6. Calcular comissão
         CommissionCalculation commission = calculateCommission(
-                finalAmount, organizer, event, saleDTO.getQuantity());
+                finalAmount, organizer, event, totalQuantity);
 
-        // 7. Criar registro de venda com o modelo TicketSale
-        TicketSale sale = createTicketSale(
-                saleDTO,
-                ticket,
-                event,
-                organizer,
-                coupon,
-                priceCalculation,
-                couponDiscount,
-                finalAmount,
-                commission
-        );
+        // 7. Criar registro de venda
+        TicketSale sale = createTicketSale(saleDTO, ticketQuantities, event, organizer, coupon,
+                priceCalculation, couponDiscount, finalAmount, commission, null);
+        ticketSaleRepository.save(sale);
 
-        // 8. Atualizar estoque
-        updateTicketInventory(ticket, saleDTO.getQuantity());
+        // 8. Criar itens para cada ticket
+        for (Map.Entry<Long, Integer> entry : ticketQuantities.entrySet()) {
+            Long ticketId = entry.getKey();
+            int qty = entry.getValue();
 
-        // 9. Atualizar estatísticas financeiras
-        updateFinancialStats(event, finalAmount, commission.amount(), commission.payout());
+            EventTicket ticketItem = ticketMap.get(ticketId);
+            BigDecimal originalPrice = ticketItem.getOriginalPrice() != null
+                    ? ticketItem.getOriginalPrice()
+                    : ticketItem.getCurrentPrice();
+            BigDecimal subtotal = originalPrice.multiply(BigDecimal.valueOf(qty));
 
-        // 10. Atualizar organizador
-        updateOrganizerStats(organizer, finalAmount, commission.amount(), saleDTO.getQuantity());
+            // Calcular preço final do item (proporcional ao total)
+            BigDecimal proportion = subtotal.divide(priceCalculation.getSubtotal(), 10, RoundingMode.HALF_EVEN);
+            BigDecimal itemFinalPrice = finalAmount.multiply(proportion);
+            BigDecimal itemDiscount = subtotal.subtract(itemFinalPrice);
 
-        // 11. Se for evento trial, marcar como usado
-        if (commission.isTrial()) {
-            organizer.consumeTrialEvent();
+            TicketSaleItem item = TicketSaleItem.builder()
+                    .sale(sale)
+                    .ticket(ticketItem)
+                    .quantity(qty)
+                    .unitPrice(originalPrice)
+                    .finalPrice(itemFinalPrice)
+                    .discountAmount(itemDiscount)
+                    .build();
+            ticketSaleItemRepository.save(item);
+            sale.addItem(item);
+
+            // Atualizar estoque do ticket
+            updateTicketInventory(ticketItem, qty);
         }
 
-        // 12. Atualizar histórico de fidelidade
+        // ============================================================
+        // 🔥 9. ATUALIZAR ESTATÍSTICAS DO EVENTO (USANDO QUERY DIRETA)
+        // ============================================================
+        // ❌ REMOVA: updateFinancialStats(event, finalAmount, commission.amount(), commission.payout());
+        // ✅ Use query direta:
+        eventRepository.updateFinancialAndTicketStats(
+                eventId,                          // ID do evento
+                finalAmount,                      // totalSales
+                commission.amount(),              // totalCommission
+                commission.payout(),              // totalOrganizerPayout
+                totalQuantity                     // soldTickets +, availableTickets -
+        );
+        log.info("📊 Event stats updated: revenue={}, commission={}, payout={}, tickets={}",
+                finalAmount, commission.amount(), commission.payout(), totalQuantity);
+
+        // ============================================================
+        // 🔥 10. ATUALIZAR ORGANIZADOR (USANDO QUERY DIRETA)
+        // ============================================================
+        // ❌ REMOVA: updateOrganizerStats(organizer, finalAmount, commission.amount(), totalQuantity);
+        // ✅ Use query direta:
+        organizerRepository.updateStats(
+                organizerId,                      // ID do organizador
+                finalAmount,                      // totalEarnings
+                commission.amount(),              // totalCommissionPaid
+                totalQuantity,                    // totalTicketsSold
+                commission.payout()               // accountBalance
+        );
+        log.info("👤 Organizer stats updated: earnings={}, commission={}, tickets={}, balance={}",
+                finalAmount, commission.amount(), totalQuantity, commission.payout());
+
+        // ============================================================
+        // 🔥 11. CONSUMIR TRIAL SE FOR O CASO
+        // ============================================================
+        // ❌ REMOVA: if (commission.isTrial()) { organizer.consumeTrialEvent(); }
+        // ✅ Use query direta:
+        if (commission.isTrial()) {
+            int updated = organizerRepository.consumeTrialEvent(organizerId);
+            if (updated == 0) {
+                log.warn("⚠️ Trial event consumed failed for organizer: {}", organizerId);
+            } else {
+                log.info("🎯 Trial event consumed for organizer: {}", organizerId);
+            }
+        }
+
+        // ============================================================
+        // 🔥 12. SALVAR TICKETS (NECESSÁRIO - MANTÉM)
+        // ============================================================
+        for (EventTicket ticket : tickets) {
+            eventTicketRepository.save(ticket);
+        }
+
+        // ============================================================
+        // 🔥 13. ATUALIZAR HISTÓRICO DE FIDELIDADE (MANTÉM)
+        // ============================================================
         if (saleDTO.getUserId() != null) {
             loyaltyService.updateCustomerHistory(
                     saleDTO.getUserId(),
-                    ticket,
-                    saleDTO.getQuantity(),
+                    firstTicket,
+                    totalQuantity,
                     finalAmount,
                     event
             );
         }
 
-        // 13. Salvar todas as alterações
-        eventTicketRepository.save(ticket);
+        // ============================================================
+        // 🔥 14. SALVAR CUPOM SE USADO (MANTÉM)
+        // ============================================================
         if (coupon != null) {
             discountCouponRepository.save(coupon);
+            log.info("🎟️ Coupon saved: {}", coupon.getCode());
         }
-        eventRepository.save(event);
-        organizerRepository.save(organizer);
-        TicketSale savedSale = ticketSaleRepository.save(sale);
 
-        log.info("✅ Sale created successfully. Transaction ID: {}, Total: {}, Discounts: {}",
-                savedSale.getTransactionId(), finalAmount, savedSale.getTotalDiscount());
+        // ============================================================
+        // 🔥 15. ❌ REMOVER ESTAS LINHAS - NÃO SALVAR EVENTO E ORGANIZADOR
+        // ============================================================
+        // ❌ REMOVA: eventRepository.save(event);
+        // ❌ REMOVA: organizerRepository.save(organizer);
+
+        // ============================================================
+        // 🔥 16. SALVAR VENDA (MANTÉM)
+        // ============================================================
+        TicketSale savedSale = ticketSaleRepository.save(sale);
+        log.info("💾 Sale saved with ID: {}", savedSale.getId());
+
+        // ============================================================
+        // 🔥 17. CRIAR PAYMENT TRANSACTION (MANTÉM)
+        // ============================================================
+        log.info("💰 Criando PaymentTransaction para venda: {}", savedSale.getId());
+
+        String reservationCode = generateReservationCode();
+
+        PaymentTransactionRequestDTO paymentRequest = PaymentTransactionRequestDTO.builder()
+                .reservationCode(reservationCode)
+                .saleId(savedSale.getId())
+                .eventId(eventId)                 // Use eventId, não event.getId()
+                .userId(savedSale.getUserId())
+                .amount(savedSale.getTotalAmount())
+                .paymentMethodCode(saleDTO.getPaymentMethod())
+                .currency("MZN")
+                .quantity(savedSale.getQuantity())
+                .build();
+
+        PaymentTransactionEntity transaction = hybridPaymentService.createPaymentTransaction(paymentRequest);
+        log.info("✅ PaymentTransaction criada: {}", transaction.getReservationCode());
+
+        savedSale.setTransactionId(transaction.getReservationCode());
+        ticketSaleRepository.save(savedSale);
+
+        log.info("✅ Sale created successfully. Reservation Code: {}, Total: {}, Tickets: {}",
+                savedSale.getTransactionId(), finalAmount, ticketQuantities);
 
         return SaleResponseDTO.fromEntity(savedSale);
-    }
-
-    /**
+    }    /**
      * Cria o objeto TicketSale com todos os dados
      */
     private TicketSale createTicketSale(
             CreateSaleDTO saleDTO,
-            EventTicket ticket,
+            Map<Long, Integer> ticketQuantities,
             Event event,
             Organizer organizer,
             DiscountCoupon coupon,
             PriceCalculationResponseDTO priceCalculation,
             BigDecimal couponDiscount,
             BigDecimal finalAmount,
-            CommissionCalculation commission) {
+            CommissionCalculation commission,
+            String transactionId) {
 
-        // Calcular preço unitário baseado no original
-        BigDecimal originalPrice = ticket.getOriginalPrice() != null ?
-                ticket.getOriginalPrice() : ticket.getCurrentPrice();
-
-        BigDecimal subtotal = originalPrice.multiply(BigDecimal.valueOf(saleDTO.getQuantity()));
+        // Calcular preço médio (para compatibilidade)
+        BigDecimal averageUnitPrice = priceCalculation.getSubtotal()
+                .divide(BigDecimal.valueOf(saleDTO.getTotalQuantity()), 2, RoundingMode.HALF_EVEN);
 
         TicketSale sale = TicketSale.builder()
-                // Identificação
-                .transactionId(generateTransactionId())
-
-                // Relacionamentos
+                .transactionId(transactionId)
                 .event(event)
-                .ticket(ticket)
                 .organizer(organizer)
                 .discountCoupon(coupon)
                 .userId(saleDTO.getUserId())
-
-                // Quantidade e preços
-                .quantity(saleDTO.getQuantity())
-                .unitPrice(originalPrice)
-                .subtotal(subtotal)
+                .quantity(saleDTO.getTotalQuantity())
+                .unitPrice(averageUnitPrice)
+                .subtotal(priceCalculation.getSubtotal())
                 .discountAmount(couponDiscount)
                 .totalAmount(finalAmount)
-
-                // Comissão
                 .commissionRate(commission.rate())
                 .commissionAmount(commission.amount())
                 .organizerPayout(commission.payout())
-
-                // Dados do comprador
                 .buyerEmail(saleDTO.getBuyerEmail())
                 .buyerName(saleDTO.getBuyerName())
                 .buyerPhone(saleDTO.getBuyerPhone())
-
-                // Status
                 .status(SaleStatus.PENDING)
-
-                // Flags
                 .isTrialEvent(commission.isTrial())
-
-                // UTMs (capturados automaticamente)
                 .utmSource(saleDTO.getUtmSource())
                 .utmMedium(saleDTO.getUtmMedium())
                 .utmCampaign(saleDTO.getUtmCampaign())
-
                 .build();
 
-        // Adicionar estratégias aplicadas (usa o método de conveniência)
-        if (priceCalculation.getAppliedStrategies() != null &&
-                !priceCalculation.getAppliedStrategies().isEmpty()) {
-
+        if (priceCalculation.getAppliedStrategies() != null && !priceCalculation.getAppliedStrategies().isEmpty()) {
             sale.addAppliedStrategies(priceCalculation.getAppliedStrategies());
-
-            // Se houver desconto das estratégias, registrar
             BigDecimal strategiesDiscount = priceCalculation.getSubtotal()
                     .subtract(priceCalculation.getDiscountedPrice());
             sale.setTotalDiscountFromStrategies(strategiesDiscount);
@@ -214,17 +306,15 @@ public class TicketSaleService {
      */
     private PriceCalculationResponseDTO calculatePriceWithStrategies(
             CreateSaleDTO saleDTO,
-            EventTicket ticket,
+            Map<Long, Integer> ticketQuantities,
             Event event) {
-
-        Map<Long, Integer> quantities = new HashMap<>();
-        quantities.put(ticket.getId(), saleDTO.getQuantity());
 
         PriceCalculationRequestDTO request = PriceCalculationRequestDTO.builder()
                 .eventId(event.getId())
-                .ticketQuantities(quantities)
+                .ticketQuantities(ticketQuantities)
                 .userId(saleDTO.getUserId())
                 .email(saleDTO.getBuyerEmail())
+                .couponCode(saleDTO.getCouponCode())
                 .build();
 
         return ticketPricingService.calculatePrice(request);
@@ -362,13 +452,18 @@ public class TicketSaleService {
     }
 
     /**
-     * Gera ID de transação único
+     * Gera código único para a reserva
      */
-    private String generateTransactionId() {
-        return "TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase() +
-                "-" + System.currentTimeMillis();
-    }
+    private static final AtomicLong sequence = new AtomicLong(1);
 
+    private String generateReservationCode() {
+        long timestamp = System.currentTimeMillis() / 1000; // 10 dígitos
+        String ts = String.valueOf(timestamp).substring(2); // pega 8 dígitos (posição 2 em diante)
+        // timestamp = 1748537890
+        // substring(2) = "48537890" (8 dígitos)
+        String seq = String.format("%03d", sequence.getAndIncrement() % 1000); // 3 dígitos
+        return ts + seq; // 8 + 3 = 11 dígitos ✅
+    }
     // ==================== MÉTODOS DE CONSULTA ====================
 
     @Transactional(readOnly = true)
@@ -449,10 +544,16 @@ public class TicketSaleService {
 
         sale.markAsCancelled(reason);
 
-        // Restaurar estoque
-        EventTicket ticket = sale.getTicket();
-        ticket.setSoldQuantity(ticket.getSoldQuantity() - sale.getQuantity());
-        ticket.setAvailableQuantity(ticket.getAvailableQuantity() + sale.getQuantity());
+        // ✅ CORRIGIDO: Restaurar estoque de TODOS os tickets nos itens
+        for (TicketSaleItem item : sale.getItems()) {
+            EventTicket ticket = item.getTicket();
+            int quantity = item.getQuantity();
+
+            ticket.setSoldQuantity(ticket.getSoldQuantity() - quantity);
+            ticket.setAvailableQuantity(ticket.getAvailableQuantity() + quantity);
+
+            eventTicketRepository.save(ticket);
+        }
 
         // Atualizar evento
         Event event = sale.getEvent();
@@ -477,7 +578,6 @@ public class TicketSaleService {
         }
 
         ticketSaleRepository.save(sale);
-        eventTicketRepository.save(ticket);
         eventRepository.save(event);
 
         log.info("Sale cancelled: {}, Reason: {}", transactionId, reason);

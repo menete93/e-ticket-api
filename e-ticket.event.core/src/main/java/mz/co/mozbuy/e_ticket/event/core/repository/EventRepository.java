@@ -285,5 +285,88 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
 
 
 
+    // ============================================
+    // 🔥 QUERIES PARA ATUALIZAÇÃO PARCIAL
+    // ============================================
 
+    /**
+     * Atualiza apenas estatísticas financeiras e de tickets
+     * NÃO TOUCA no geographicLocation
+     */
+    @Modifying
+    @Query("UPDATE Event e SET " +
+            "e.totalSales = COALESCE(e.totalSales, 0) + :amount, " +
+            "e.totalCommission = COALESCE(e.totalCommission, 0) + :commission, " +
+            "e.totalOrganizerPayout = COALESCE(e.totalOrganizerPayout, 0) + :payout, " +
+            "e.soldTickets = COALESCE(e.soldTickets, 0) + :quantity, " +
+            "e.availableTickets = COALESCE(e.availableTickets, 0) - :quantity " +
+            "WHERE e.id = :eventId")
+    void updateFinancialAndTicketStats(
+            @Param("eventId") Long eventId,
+            @Param("amount") BigDecimal amount,
+            @Param("commission") BigDecimal commission,
+            @Param("payout") BigDecimal payout,
+            @Param("quantity") Integer quantity
+    );
+
+    /**
+     * Atualiza apenas estatísticas financeiras
+     */
+    @Modifying
+    @Query("UPDATE Event e SET " +
+            "e.totalSales = COALESCE(e.totalSales, 0) + :amount, " +
+            "e.totalCommission = COALESCE(e.totalCommission, 0) + :commission, " +
+            "e.totalOrganizerPayout = COALESCE(e.totalOrganizerPayout, 0) + :payout " +
+            "WHERE e.id = :eventId")
+    void updateFinancialStatsOnly(
+            @Param("eventId") Long eventId,
+            @Param("amount") BigDecimal amount,
+            @Param("commission") BigDecimal commission,
+            @Param("payout") BigDecimal payout
+    );
+
+    /**
+     * Atualiza apenas contagem de tickets
+     */
+    @Modifying
+    @Query("UPDATE Event e SET " +
+            "e.soldTickets = COALESCE(e.soldTickets, 0) + :quantity, " +
+            "e.availableTickets = COALESCE(e.availableTickets, 0) - :quantity " +
+            "WHERE e.id = :eventId")
+    void updateTicketCounts(
+            @Param("eventId") Long eventId,
+            @Param("quantity") Integer quantity
+    );
+
+    /**
+     * Atualiza status do evento (ativo/cancelado)
+     */
+    @Modifying
+    @Query("UPDATE Event e SET " +
+            "e.isCancelled = :cancelled, " +
+            "e.cancelledAt = :cancelledAt, " +
+            "e.cancelReason = :reason " +
+            "WHERE e.id = :eventId")
+    void updateCancellationStatus(
+            @Param("eventId") Long eventId,
+            @Param("cancelled") Boolean cancelled,
+            @Param("cancelledAt") LocalDateTime cancelledAt,
+            @Param("reason") String reason
+    );
+
+//    /**
+//     * Busca evento com tickets (para carregamento completo)
+//     */
+//    @Query("SELECT e FROM Event e " +
+//            "LEFT JOIN FETCH e.tickets " +
+//            "WHERE e.id = :id")
+//    Optional<Event> findByIdWithTickets(@Param("id") Long id);
+
+    /**
+     * Busca evento com organizador (para carregamento completo)
+     */
+    @Query("SELECT e FROM Event e " +
+            "LEFT JOIN FETCH e.organizer " +
+            "WHERE e.id = :id")
+    Optional<Event> findByIdWithOrganizer(@Param("id") Long id);
 }

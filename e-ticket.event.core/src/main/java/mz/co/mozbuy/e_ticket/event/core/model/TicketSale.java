@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Data
@@ -41,10 +42,6 @@ public class TicketSale extends AuditableEntity<Long, String> {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
     private Event event;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ticket_id", nullable = false)
-    private EventTicket ticket;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organizer_id", nullable = false)
@@ -111,6 +108,10 @@ public class TicketSale extends AuditableEntity<Long, String> {
 
     @Column(name = "is_trial_event")
     private Boolean isTrialEvent = false;
+
+
+    @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<TicketSaleItem> items = new ArrayList<>();
 
     // ==================== CAMPOS DE ESTRATÉGIAS ====================
 
@@ -311,5 +312,31 @@ public class TicketSale extends AuditableEntity<Long, String> {
             return totalAmount.subtract(commissionAmount);
         }
         return totalAmount;
+    }
+
+    public void addItem(TicketSaleItem item) {
+        if (items == null) {
+            items = new ArrayList<>();
+        }
+
+        items.add(item);
+        item.setSale(this);
+    }
+
+    public void removeItem(TicketSaleItem item) {
+        items.remove(item);
+        item.setSale(null);
+    }
+
+    public BigDecimal calculateTotalFromItems() {
+        return items.stream()
+                .map(TicketSaleItem::getFinalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public List<EventTicket> getAllTickets() {
+        return items.stream()
+                .map(TicketSaleItem::getTicket)
+                .collect(Collectors.toList());
     }
 }

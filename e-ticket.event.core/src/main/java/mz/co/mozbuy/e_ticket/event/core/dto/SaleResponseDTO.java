@@ -11,6 +11,7 @@ import mz.co.mozbuy.e_ticket.event.core.model.TicketSale;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Data
 @Builder
@@ -21,8 +22,11 @@ public class SaleResponseDTO {
     private String transactionId;
     private Long eventId;
     private String eventName;
-    private Long ticketId;
-    private String ticketName;
+
+    // ❌ Remover ticketId e ticketName (agora estão nos itens)
+    // private Long ticketId;
+    // private String ticketName;
+
     private Integer quantity;
     private BigDecimal unitPrice;
     private BigDecimal subtotal;
@@ -35,20 +39,21 @@ public class SaleResponseDTO {
     private SaleStatus status;
     private LocalDateTime createdAt;
 
-    // 🔥 NOVOS CAMPOS
+    // ✅ Itens da venda (múltiplos tickets)
+    private List<TicketSaleItemDTO> items;
+
+    // Estratégias aplicadas
     private List<PriceBreakdownItemDTO> appliedStrategies;
     private BigDecimal totalDiscountFromStrategies;
 
     public static SaleResponseDTO fromEntity(TicketSale sale) {
-        SaleResponseDTO dto = SaleResponseDTO.builder()
+        SaleResponseDTOBuilder builder = SaleResponseDTO.builder()
                 .id(sale.getId())
                 .transactionId(sale.getTransactionId())
                 .eventId(sale.getEvent() != null ? sale.getEvent().getId() : null)
                 .eventName(sale.getEvent() != null ? sale.getEvent().getName() : null)
-                .ticketId(sale.getTicket() != null ? sale.getTicket().getId() : null)
-                .ticketName(sale.getTicket() != null ? sale.getTicket().getTicketName() : null)
                 .quantity(sale.getQuantity())
-                .unitPrice(sale.getTicket().getOriginalPrice())
+                .unitPrice(sale.getUnitPrice())
                 .subtotal(sale.getSubtotal())
                 .discountAmount(sale.getDiscountAmount())
                 .totalAmount(sale.getTotalAmount())
@@ -58,11 +63,16 @@ public class SaleResponseDTO {
                 .buyerName(sale.getBuyerName())
                 .status(sale.getStatus())
                 .createdAt(sale.getCreatedAt())
-                // 🔥 NOVOS CAMPOS
                 .appliedStrategies(sale.getAppliedStrategies())
-                .totalDiscountFromStrategies(sale.getTotalDiscountFromStrategies())
-                .build();
+                .totalDiscountFromStrategies(sale.getTotalDiscountFromStrategies());
 
-        return dto;
+        // Adicionar itens (múltiplos tickets)
+        if (sale.getItems() != null && !sale.getItems().isEmpty()) {
+            builder.items(sale.getItems().stream()
+                    .map(TicketSaleItemDTO::fromEntity)
+                    .collect(Collectors.toList()));
+        }
+
+        return builder.build();
     }
 }

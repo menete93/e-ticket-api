@@ -46,6 +46,19 @@ eureka:
   instance:
       preferIpAddress: true
 
+# Configuração do executor para callbacks assíncronos
+payment:
+  async:
+    callback-executor:
+      core-pool-size: 5
+      max-pool-size: 10
+      queue-capacity: 100
+      thread-name-prefix: callback-
+
+  reservation:
+    sync-timeout-minutes: 30
+    async-timeout-minutes: 2880
+    max-attempts: 3
 
 logging:
   level:

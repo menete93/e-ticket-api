@@ -1,8 +1,8 @@
 package mz.co.mozbuy.e_ticket.event.core.repository;
 
-import mz.co.mozbuy.e_ticket.event.core.model.PaymentMethodEntity;
 import mz.co.mozbuy.e_ticket.event.core.model.PaymentTransactionEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -11,25 +11,24 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-// PaymentTransactionRepository.java
 @Repository
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransactionEntity, Long> {
 
-    Optional<PaymentTransactionEntity> findByTransactionId(String transactionId);
+    Optional<PaymentTransactionEntity> findByReservationCode(String reservationCode);
 
     List<PaymentTransactionEntity> findByStatus(String status);
 
-    @Query("SELECT p FROM PaymentTransactionEntity p WHERE p.status = :status AND p.createdAt < :date")
-    List<PaymentTransactionEntity> findExpiredTransactions(@Param("status") String status, @Param("date") LocalDateTime date);
+    List<PaymentTransactionEntity> findBySaleId(Long saleId);
 
-    Optional<PaymentTransactionEntity> findByProviderCheckoutId(String providerCheckoutId);
+    List<PaymentTransactionEntity> findByUserId(Long userId);
 
-    // 🔥 MÉTODO PARA BUSCAR COM RELACIONAMENTOS
-    @Query("SELECT pt FROM PaymentTransactionEntity pt " +
-            "LEFT JOIN FETCH pt.event " +
-            "LEFT JOIN FETCH pt.ticket " +
-            "LEFT JOIN FETCH pt.sale " +
-            "WHERE pt.transactionId = :transactionId")
-    Optional<PaymentTransactionEntity> findByTransactionIdWithRelations(@Param("transactionId") String transactionId);
+    List<PaymentTransactionEntity> findByStatusAndExpiresAtBefore(String status, LocalDateTime date);
 
+    @Modifying
+    @Query("UPDATE PaymentTransactionEntity pt SET pt.status = :status WHERE pt.reservationCode = :reservationCode")
+    int updateStatus(@Param("reservationCode") String reservationCode, @Param("status") String status);
+
+    @Modifying
+    @Query("UPDATE PaymentTransactionEntity pt SET pt.status = 'EXPIRED' WHERE pt.status = 'PENDING' AND pt.expiresAt < :now")
+    int expireAllPending(@Param("now") LocalDateTime now);
 }

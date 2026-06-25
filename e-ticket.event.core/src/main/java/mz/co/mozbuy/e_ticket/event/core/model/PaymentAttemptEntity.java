@@ -1,49 +1,61 @@
 package mz.co.mozbuy.e_ticket.event.core.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import mz.co.mozbuy.common.audit.AuditableEntity;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import java.time.LocalDateTime;
-import java.util.Map;
 
+@Entity
+@Table(name = "payment_attempt", schema = "e_ticket")
 @Getter
 @Setter
-@Entity
-@Table(name = "PAYMENT_ATTEMPT", indexes = {
-        @Index(name = "IDX_PAYMENT_ATTEMPT_01", columnList = "TRANSACTION_ID"),
-        @Index(name = "IDX_PAYMENT_ATTEMPT_02", columnList = "CREATED_AT")
-})
-@SequenceGenerator(name = "GENERATOR", sequenceName = "PAYMENT_ATTEMPT_SEQ", initialValue = 1, allocationSize = 1)
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PaymentAttemptEntity extends AuditableEntity<Long, String> {
 
-    @ManyToOne
-    @JoinColumn(name = "TRANSACTION_ID", referencedColumnName = "TRANSACTION_ID")
-    private PaymentTransactionEntity transaction;
 
-    @Column(name = "ATTEMPT_NUMBER", nullable = false)
+    @Column(name = "payment_transaction_id", nullable = false)
+    private Long paymentTransactionId;
+
+    @Column(name = "attempt_number", nullable = false)
     private Integer attemptNumber;
 
-    @Column(name = "STATUS", length = 30)
-    private String status;
+    @Column(name = "payment_method_code", nullable = false, length = 30)
+    private String paymentMethodCode;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "REQUEST_PAYLOAD", columnDefinition = "json")
-    private Map<String, Object> requestPayload;
+    @Column(name = "phone_number", length = 20)
+    private String phoneNumber;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "RESPONSE_PAYLOAD", columnDefinition = "json")
-    private Map<String, Object> responsePayload;
+    @Column(name = "status", nullable = false, length = 30)
+    private String status;  // SUCCESS, FAILED
 
-    @Column(name = "ERROR_MESSAGE", columnDefinition = "TEXT")
+    @Column(name = "provider_transaction_id", length = 100)
+    private String providerTransactionId;
+
+    @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
-    @Column(name = "DURATION_MS")
+    @Column(name = "duration_ms")
     private Long durationMs;
 
-    @Column(name = "PROCESSED_AT")
+    @Column(name = "processed_at")
     private LocalDateTime processedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (processedAt == null) processedAt = LocalDateTime.now();
+    }
+
+    public void markSuccess(String providerTransactionId) {
+        this.status = "SUCCESS";
+        this.providerTransactionId = providerTransactionId;
+        this.processedAt = LocalDateTime.now();
+    }
+
+    public void markFailed(String errorMessage) {
+        this.status = "FAILED";
+        this.errorMessage = errorMessage;
+        this.processedAt = LocalDateTime.now();
+    }
 }

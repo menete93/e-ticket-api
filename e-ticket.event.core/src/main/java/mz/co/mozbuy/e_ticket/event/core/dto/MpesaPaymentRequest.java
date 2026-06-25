@@ -1,39 +1,17 @@
 package mz.co.mozbuy.e_ticket.event.core.dto;
 
-
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
-
-import java.math.BigDecimal;
+import lombok.Data;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class MpesaPaymentRequest {
+    @NotBlank(message = "Reservation code é obrigatório")
+    private String reservationCode;  // ← antes transactionId
 
-    @NotNull(message = "saleId é obrigatório")
+    @NotNull(message = "Sale ID é obrigatório")
     private Long saleId;
 
-    @NotNull(message = "eventId é obrigatório")
-    private Long eventId;
-
-    @NotBlank(message = "transactionId é obrigatório")
-    private String transactionId;
-
-    @NotNull(message = "valor é obrigatório")
-    private BigDecimal amount;
-
-    @NotBlank(message = "phoneNumber é obrigatório")
-    @Pattern(regexp = "^8[2-7][0-9]{7}$", message = "Número de telefone inválido")
+    @NotBlank(message = "Número de telefone é obrigatório")
     private String phoneNumber;
-
-    private Long userId;
-    private String payerName;
-    private String payerEmail;
 }

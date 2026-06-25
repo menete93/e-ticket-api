@@ -7,9 +7,9 @@ import com.fc.sdk.APIMethodType;
 import com.fc.sdk.APIRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import mz.co.mozbuy.e_ticket.event.core.dto.MpesaResultDTO;
 import mz.co.mozbuy.e_ticket.event.core.exceptions.BusinessException;
 import mz.co.mozbuy.e_ticket.event.core.exceptions.SystemException;
+import mz.co.mozbuy.e_ticket.event.core.integ.dto.MpesaResultDTO;
 import mz.co.mozbuy.e_ticket.event.core.model.PaymentProviderConfigEntity;
 import mz.co.mozbuy.e_ticket.event.core.model.PaymentTransactionEntity;
 import org.springframework.stereotype.Service;
@@ -29,7 +29,7 @@ public class MpesaIntegrationService {
                                       PaymentProviderConfigEntity providerApiConfig) {
         try {
             log.info("📤 Enviando requisição para M-Pesa - Transação: {}, Telefone: {}",
-                    paymentTransaction.getTransactionId(), customerMSISDN);
+                    paymentTransaction.getReservationCode(), customerMSISDN);
 
             final var context = new APIContext();
             context.setApiKey(providerApiConfig.getApiKey());
@@ -42,11 +42,11 @@ public class MpesaIntegrationService {
             context.addHeader("Origin", "*");
 
             // Parâmetros da requisição M-Pesa
-            context.addParameter("input_TransactionReference", paymentTransaction.getTransactionId());
+            context.addParameter("input_TransactionReference", paymentTransaction.getReservationCode());
             String msisdn = normalizeMsisdn(customerMSISDN);
             context.addParameter("input_CustomerMSISDN", msisdn);
             context.addParameter("input_Amount", String.valueOf(paymentTransaction.getAmount()));
-            context.addParameter("input_ThirdPartyReference", paymentTransaction.getTransactionId());
+            context.addParameter("input_ThirdPartyReference", paymentTransaction.getReservationCode());
             context.addParameter("input_ServiceProviderCode", providerApiConfig.getPartnerCode());
 
             final var request = new APIRequest(context);

@@ -11,41 +11,46 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Entity
-@Table(name = "PAYMENT_REFUND", indexes = {
-        @Index(name = "IDX_PAYMENT_REFUND_01", columnList = "TRANSACTION_ID"),
-        @Index(name = "IDX_PAYMENT_REFUND_02", columnList = "REFUND_TRANSACTION_ID")
+@Table(name = "payment_refund", schema = "e_ticket", indexes = {
+        @Index(name = "IDX_PAYMENT_REFUND_01", columnList = "payment_transaction_id"),
+        @Index(name = "IDX_PAYMENT_REFUND_02", columnList = "refund_transaction_id")
 })
-@SequenceGenerator(name = "GENERATOR", sequenceName = "PAYMENT_REFUND_SEQ", initialValue = 1, allocationSize = 1)
 public class PaymentRefundEntity extends AuditableEntity<Long, String> {
 
-    @ManyToOne
-    @JoinColumn(name = "TRANSACTION_ID", referencedColumnName = "TRANSACTION_ID")
+    // ✅ Relacionamento ManyToOne com PaymentTransactionEntity (referencia o ID)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_transaction_id", referencedColumnName = "id", nullable = false)
     private PaymentTransactionEntity transaction;
 
-    @Column(name = "REFUND_TRANSACTION_ID", unique = true, length = 50)
+    @Column(name = "refund_transaction_id", unique = true, length = 50)
     private String refundTransactionId;
 
-    @Column(name = "AMOUNT", nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "REASON", length = 255)
+    @Column(length = 255)
     private String reason;
 
-    @Column(name = "STATUS", length = 30)
+    @Column(length = 30)
     private String status;  // PENDING, PROCESSING, COMPLETED, FAILED
 
-    @Column(name = "REQUESTED_BY", length = 100)
+    @Column(name = "requested_by", length = 100)
     private String requestedBy;
 
-    @Column(name = "APPROVED_BY", length = 100)
+    @Column(name = "approved_by", length = 100)
     private String approvedBy;
 
-    @Column(name = "APPROVED_AT")
+    @Column(name = "approved_at")
     private LocalDateTime approvedAt;
 
-    @Column(name = "COMPLETED_AT")
+    @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
-    @Column(name = "EXTERNAL_REFUND_ID", length = 100)
+    @Column(name = "external_refund_id", length = 100)
     private String externalRefundId;
+
+    @PrePersist
+    protected void onCreate() {
+        if (status == null) status = "PENDING";
+    }
 }

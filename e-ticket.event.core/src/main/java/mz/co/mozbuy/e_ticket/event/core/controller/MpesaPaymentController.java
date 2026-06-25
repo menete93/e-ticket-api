@@ -4,11 +4,13 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mz.co.mozbuy.e_ticket.event.core.dto.MpesaPaymentRequest;
-import mz.co.mozbuy.e_ticket.event.core.dto.MpesaResultDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.PaymentResponse.PaymentResponse;
 import mz.co.mozbuy.e_ticket.event.core.dto.PaymentTransaction.PaymentTransactionRequestDTO;
 import mz.co.mozbuy.e_ticket.event.core.dto.PaymentTransaction.PaymentTransactionResponseDTO;
+import mz.co.mozbuy.e_ticket.event.core.dto.TransactionStatusResponse;
 import mz.co.mozbuy.e_ticket.event.core.model.PaymentTransactionEntity;
-import mz.co.mozbuy.e_ticket.event.core.service.mpesa.MpesaPaymentService;
+import mz.co.mozbuy.e_ticket.event.core.service.payment.HybridPaymentService;
+import mz.co.mozbuy.e_ticket.event.core.service.payment.PaymentResult;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,101 +24,116 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MpesaPaymentController {
 
-    private final MpesaPaymentService mpesaPaymentService;
+    private final HybridPaymentService hybridPaymentService;
+
 
     /**
-     * Inicia pagamento M-Pesa
+     * Iniciar pagamento M-PESA (Síncrono)
+     * POST /payment/mpesa/initiate
      */
     @PostMapping("/initiate")
-    public ResponseEntity<MpesaResultDTO> initiatePayment(@Valid @RequestBody MpesaPaymentRequest request) {
-        log.info("📱 Iniciando pagamento M-Pesa para venda: {}", request.getSaleId());
+    public ResponseEntity<PaymentResponse> initiatePayment(@Valid @RequestBody MpesaPaymentRequest request) {
+        log.info("📱 Iniciando pagamento M-PESA - ReservationCode: {}, Venda: {}, Telefone: {}",
+                request.getReservationCode(), request.getSaleId(), request.getPhoneNumber());
 
-        MpesaResultDTO result = mpesaPaymentService.processMpesaPayment(
-                request.getTransactionId(),
-                request.getPhoneNumber()
-        );
+        Map<String, Object> paymentData = new HashMap<>();
+        paymentData.put("phoneNumber", request.getPhoneNumber());
+        paymentData.put("paymentMethodCode", "MPESA");
 
-        return ResponseEntity.ok(result);
+        // M-PESA é síncrono - a resposta vem imediatamente
+        PaymentResult result = hybridPaymentService.processPayment(
+                request.getReservationCode(),
+                request.getSaleId(),
+                paymentData);
+
+        return buildResponse(result);
     }
 
     /**
-     * Callback do M-Pesa
+     * Consultar status de uma reserva/transação
+     * GET /payment/mpesa/status/{reservationCode}
      */
-    @PostMapping("/callback")
-    public ResponseEntity<Map<String, String>> mpesaCallback(@RequestBody Map<String, Object> callbackData) {
-        log.info("📞 Recebido callback do M-Pesa");
+    @GetMapping("/status/{reservationCode}")
+    public ResponseEntity<TransactionStatusResponse> getTransactionStatus(@PathVariable String reservationCode) {
+        log.info("🔍 Consultando status da reserva: {}", reservationCode);
 
-        // ✅ CORRIGIDO - variáveis com nomes diferentes
-        String transactionReference = (String) callbackData.get("TransactionReference");
-        String resultCode = (String) callbackData.get("ResultCode");
-        String resultDesc = (String) callbackData.get("ResultDesc");
-        String transactionID = (String) callbackData.get("TransactionID");
+        PaymentResult result = hybridPaymentService.getTransactionStatus(reservationCode);
 
-        log.info("Callback recebido - Ref: {}, Code: {}, Desc: {}, ID: {}",
-                transactionReference, resultCode, resultDesc, transactionID);
-
-        // Criar DTO com os dados do callback
-        MpesaResultDTO result = MpesaResultDTO.builder()
-                .responseCode(resultCode)
-                .responseDescription(resultDesc)
-                .transactionID(transactionID)
-                .thirdPartyReference(transactionReference)
+        TransactionStatusResponse response = TransactionStatusResponse.builder()
+                .transactionId(reservationCode)
+                .status(getStatusString(result))
+                .message(result.getMessage())
+                .paid(result.isPaid())
+                .canRetry(result.hasRetry())
+                .attemptNumber(result.getAttemptNumber())
+                .maxRetries(result.getMaxRetries())
+                .expiresAt(result.getExpiresAt())
                 .build();
-
-        // Processar callback usando o transactionReference
-        mpesaPaymentService.processMpesaCallback(transactionReference, result);
-
-        Map<String, String> response = new HashMap<>();
-        response.put("ResultCode", "0");
-        response.put("ResultDesc", "Success");
 
         return ResponseEntity.ok(response);
     }
 
     /**
-     * Consulta status da transação
+     * Nova tentativa de pagamento (após falha)
+     * POST /payment/mpesa/retry/{reservationCode}
      */
-    @GetMapping("/status/{transactionId}")
-    public ResponseEntity<MpesaResultDTO> getTransactionStatus(@PathVariable String transactionId) {
-        log.info("🔍 Consultando status da transação M-Pesa: {}", transactionId);
+    @PostMapping("/retry/{reservationCode}")
+    public ResponseEntity<PaymentResponse> retryPayment(
+            @PathVariable String reservationCode,
+            @RequestBody Map<String, Object> paymentData) {
 
-        MpesaResultDTO result = mpesaPaymentService.getTransactionStatus(transactionId);
+        log.info("🔄 Nova tentativa de pagamento M-PESA: {}", reservationCode);
 
-        return ResponseEntity.ok(result);
+        if (!paymentData.containsKey("phoneNumber")) {
+            return ResponseEntity.badRequest().body(
+                    PaymentResponse.builder()
+                            .success(false)
+                            .message("Número de telefone é obrigatório")
+                            .build()
+            );
+        }
+
+        paymentData.put("paymentMethodCode", "MPESA");
+
+        PaymentResult result = hybridPaymentService.retryPayment(reservationCode, paymentData);
+        return buildResponse(result);
     }
 
+    // ==================== MÉTODOS AUXILIARES PRIVADOS ====================
 
-    // PaymentController.java - Adicione este método
+    private String getStatusString(PaymentResult result) {
+        if (result.isSuccess()) return "SUCCESS";
+        if (result.isPending()) return "PENDING";
+        if (result.isExpired()) return "EXPIRED";
+        return "FAILED";
+    }
 
-    @PostMapping("/transaction/create")
-    public ResponseEntity<PaymentTransactionResponseDTO> createPaymentTransaction(
-            @Valid @RequestBody PaymentTransactionRequestDTO request) {
-
-        log.info("💰 Criando transação de pagamento - Venda: {}, Valor: {}",
-                request.getSaleId(), request.getAmount());
-
-        PaymentTransactionEntity transaction = mpesaPaymentService.initiatePayment(request);
-
-        PaymentTransactionResponseDTO response = PaymentTransactionResponseDTO.builder()
-                .id(transaction.getId())
-                .transactionId(transaction.getTransactionId())
-                .saleId(transaction.getSaleId())
-                .eventId(transaction.getEventId())
-                .amount(transaction.getAmount())
-                .status(transaction.getStatus())
-                .payerPhone(transaction.getPayerPhone())
-                .payerEmail(transaction.getPayerEmail())
-                .payerName(transaction.getPayerName())
-                .createdAt(transaction.getCreatedAt())
-                .eventName(transaction.getEventName())
-                .ticketName(transaction.getTicketName())
-                .quantity(transaction.getQuantity())
-                .totalAmount(transaction.getAmount())
+    private ResponseEntity<PaymentResponse> buildResponse(PaymentResult result) {
+        PaymentResponse response = PaymentResponse.builder()
+                .success(result.isSuccess())
+                .pending(result.isPending())
+                .paid(result.isPaid())
+                .transactionId(result.getTransactionId())
+                .providerTransactionId(result.getProviderTransactionId())
+                .attemptNumber(result.getAttemptNumber())
+                .maxRetries(result.getMaxRetries())
+                .canRetry(result.hasRetry())
+                .message(result.getMessage())
+                .expiresAt(result.getExpiresAt())
                 .build();
 
-        // 🔥 CONVERTER PARA DTO USANDO O MÉTODO ESTÁTICO
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);    }
-
-
+        if (result.isSuccess()) {
+            return ResponseEntity.ok(response);
+        }
+        if (result.isPending()) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+        }
+        if (result.hasRetry()) {
+            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(response);
+        }
+        if (result.isExpired()) {
+            return ResponseEntity.status(HttpStatus.GONE).body(response);
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
 }

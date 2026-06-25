@@ -20,7 +20,7 @@ public interface TicketSaleRepository extends JpaRepository<TicketSale, Long> {
 
     List<TicketSale> findByOrganizerId(Long organizerId);
 
-    List<TicketSale> findByTicketId(Long ticketId);
+//    List<TicketSale> findByTicketId(Long ticketId);
 
     List<TicketSale> findByBuyerEmail(String buyerEmail);
 
